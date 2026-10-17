@@ -1,18 +1,37 @@
 # Fulcrum
 
-**Website Security Scorecard & Remediation Agent**
+**Website security scorecard and remediation agent**
 
-Fulcrum scans a domain you have proven you own, grades its external
-security posture A–F, and returns a remediation plan ranked to a fix-effort
-budget you set — with the reasoning shown, not just a number.
+Fulcrum looks at a website from the outside, grades what it finds from A to
+F, and tells you which handful of things to fix first.
 
-The project has two layers, and both are graded:
+The grade is the easy part. The point is what comes after it. You give
+Fulcrum a fix-effort budget — one point is a header, thirteen is a project —
+and it ranks the available remediations by how much risk each one removes
+per unit of effort, stops when the budget runs out, and shows its working.
+That includes the awkward cases: it will defer the single worst finding and
+say so, if three cheaper fixes remove more risk between them.
 
-1. **The agent** — scanning, risk scoring, and budget-constrained
-   remediation planning. No third-party agent framework is used; the
-   reasoning loop is written directly.
-2. **The application around it** — built to a high security standard,
-   because a security tool that is itself insecure is worse than useless.
+It works at two levels, and the difference is consent. A headers check is a
+single GET request, so it runs against any public site. A full TLS scan
+opens hundreds of connections to a server, so it only runs against a domain
+you have proved you control, by DNS record or a file at a known path. That
+proof expires and has to be renewed — a domain you verified last year says
+nothing about who owns it today. Refusals are logged either way.
+
+What it will not tell you is that a site is secure. A passing grade means
+the checks Fulcrum runs found nothing wrong, which is a much smaller
+statement than it looks. It reads headers, TLS configuration and version
+fingerprints. It never sees your application logic, your dependencies, your
+infrastructure or your people.
+
+There is no agent framework underneath — the reasoning loop is written
+directly, which is what makes it possible to say precisely what the agent
+does and does not weigh. The application around it is built to the standard
+the subject matter demands: mandatory two-factor authentication, rotating
+sessions with reuse detection, an append-only audit log, and no third-party
+JavaScript anywhere, enforced by a content security policy rather than just
+intended.
 
 ---
 
