@@ -15,8 +15,6 @@ export function SignOutButton() {
       disabled={busy}
       onClick={async () => {
         setBusy(true);
-        // A POST, not a link: sign-out is state-changing, so it goes
-        // through the CSRF-protected path like every other mutation.
         await apiFetch("/api/auth/logout", { method: "POST" });
         router.push("/login");
         router.refresh();

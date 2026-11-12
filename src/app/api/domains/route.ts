@@ -13,7 +13,6 @@ import { writeAudit } from "@/lib/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Lists the caller's own domains. Scoped by userId, never by a client filter. */
 export async function GET(request: NextRequest) {
   const guard = await requireUser(request, { skipCsrf: true, rateLimit: "api" });
   if (!guard.ok) return guard.response;
@@ -45,14 +44,6 @@ export async function GET(request: NextRequest) {
   });
 }
 
-/**
- * Registers a domain and issues an ownership challenge.
- *
- * The row starts PENDING and stays unscannable until /verify succeeds.
- * A hostname is globally unique: once one account has registered it, a
- * second account cannot claim it, which stops a "register it first, verify
- * later" land-grab from blocking the real owner's verification.
- */
 export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
 
@@ -72,8 +63,6 @@ export async function POST(request: NextRequest) {
   });
 
   if (existing) {
-    // Same wording either way: whether someone else has registered this
-    // hostname is not the caller's business.
     return apiError(
       409,
       "already_registered",

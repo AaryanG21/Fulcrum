@@ -2,21 +2,15 @@ import "server-only";
 import { cookies } from "next/headers";
 import { getEnv } from "@/lib/env";
 
-/**
- * Cookie policy.
- *
- * Every auth cookie is httpOnly, Secure (outside local dev over http), and
- * SameSite=Strict. No token is ever handed to client JavaScript or written
- * to localStorage — an XSS bug should not hand an attacker a portable
- * session. The one non-httpOnly cookie is the CSRF token, which is
- * deliberately readable so the client can echo it in a header.
- */
+import {
+  ACCESS_COOKIE,
+  CSRF_COOKIE,
+  MFA_COOKIE,
+  REAUTH_COOKIE,
+  REFRESH_COOKIE,
+} from "@/lib/auth/cookie-names";
 
-export const ACCESS_COOKIE = "fulcrum_at";
-export const REFRESH_COOKIE = "fulcrum_rt";
-export const MFA_COOKIE = "fulcrum_mfa";
-export const REAUTH_COOKIE = "fulcrum_reauth";
-export const CSRF_COOKIE = "fulcrum_csrf";
+export { ACCESS_COOKIE, CSRF_COOKIE, MFA_COOKIE, REAUTH_COOKIE, REFRESH_COOKIE };
 
 function isSecureContext(): boolean {
   return getEnv().APP_ORIGIN.startsWith("https://");
@@ -61,7 +55,6 @@ export async function readCookie(name: string): Promise<string | null> {
   return store.get(name)?.value ?? null;
 }
 
-/** Drops every auth cookie. Used by logout and by forced-revocation paths. */
 export async function clearAllAuthCookies(): Promise<void> {
   await Promise.all([
     clearAuthCookie(ACCESS_COOKIE),

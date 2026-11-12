@@ -4,42 +4,36 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Cookie policy",
+  robots: { index: true, follow: true },
+  alternates: { canonical: "/cookies" },
   description:
-    "The five cookies Fulcrum sets, what each one does, how long it lasts, and why you are not asked to consent to any of them.",
+    "The cookies Fulcrum sets, what each one does, how long it lasts, and why you are not asked to consent to any of them.",
 };
 
-/**
- * Cookie policy.
- *
- * Checked against src/lib/auth/cookies.ts and src/lib/security/csrf.ts. The
- * lifetimes are the defaults from src/lib/env.ts; an operator who changes
- * those environment variables must change this table with them.
- *
- * The statement about fulcrum_csrf surviving sign-out is deliberate and
- * easy to miss: clearAllAuthCookies() clears the four httpOnly cookies and
- * not the CSRF one. Saying "all cookies are deleted when you sign out"
- * would have been the natural sentence to write and would have been false.
- */
 export default function CookiePolicy() {
   return (
     <>
       <h1>Cookie policy</h1>
 
       <p>
-        Fulcrum sets five cookies. Every one of them exists to sign you in and
-        keep that session safe. There are no analytics, advertising,
-        personalisation or A/B-testing cookies — not disabled, not present.
+        Fulcrum sets five cookies that exist to sign you in and keep that
+        session safe. It sets a sixth, <code>fulcrum_theme</code>, only if you
+        press the light/dark switch, to remember what you picked. There are no
+        analytics, advertising, tracking or A/B-testing cookies — not disabled,
+        not present.
       </p>
 
       <h2>Why there is no cookie banner</h2>
 
       <p>
         Consent is required for cookies that are not strictly necessary.
-        Because all five of ours are necessary to provide the service you
-        asked for — you cannot sign in without them — there is nothing to
-        consent to, and asking anyway would be a pretence: a banner offering a
-        choice that does not exist, for cookies you could not refuse without
-        the site ceasing to work.
+        Consent is not needed for the five sign-in cookies, because they are
+        necessary to provide the service you asked for — you cannot sign in
+        without them — and asking anyway would be a pretence: a banner offering
+        a choice that does not exist. The sixth, <code>fulcrum_theme</code>, is
+        not needed to sign in, which is why it is never set on its own: it
+        appears only as the direct result of you pressing the theme switch, and
+        a visitor who never touches the switch never receives it.
       </p>
 
       <p>
@@ -110,12 +104,24 @@ export default function CookiePolicy() {
             </td>
             <td>7 days</td>
           </tr>
+          <tr>
+            <td>
+              <code>fulcrum_theme</code>
+            </td>
+            <td>
+              Remembers whether you chose the light or the dark theme. Set only
+              when you press the theme switch. It contains the single word{" "}
+              <code>light</code> or <code>dark</code>. Readable by JavaScript,
+              because the switch writes it.
+            </td>
+            <td>1 year</td>
+          </tr>
         </tbody>
       </table>
 
       <p>
-        All five are restricted to this site only and are never sent to another
-        domain. Four of the five cannot be read by JavaScript at all. When this
+        All six are restricted to this site only and are never sent to another
+        domain. Four of the six cannot be read by JavaScript at all. When this
         site is served over HTTPS, all are marked so the browser will only send
         them over an encrypted connection.
       </p>
@@ -137,7 +143,9 @@ export default function CookiePolicy() {
         value, is tied to no account, and grants no access on its own — but it
         is still there, and saying &ldquo;signing out removes all cookies&rdquo;
         would not have been true. You can clear it through your browser at any
-        time.
+        time. <code>fulcrum_theme</code> is not deleted either: it is a display
+        preference, tied to no account, and it stays for up to a year or until
+        you clear it in your browser or press the switch again.
       </p>
 
       <h2>Other storage</h2>

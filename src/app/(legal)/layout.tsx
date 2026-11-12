@@ -2,21 +2,9 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { SiteFooter } from "@/components/site-footer";
 import { JURISDICTION, OPERATOR, isConfigured } from "@/lib/legal/operator";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { Logo } from "@/components/logo";
 
-/**
- * Shell for the legal pages.
- *
- * These are the only routes on the site meant to be indexed and read by
- * someone who is not signed in, so they get a plain reading layout rather
- * than the application chrome.
- *
- * The unconfigured-operator banner is deliberately impossible to miss. A
- * privacy policy that names no Data Fiduciary and gives no grievance
- * contact does not satisfy the DPDP Act however carefully the rest is
- * worded, and publishing one that says "PLACEHOLDER" is worse than having
- * none at all — it looks like diligence while providing none.
- */
 export default function LegalLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
@@ -24,20 +12,23 @@ export default function LegalLayout({ children }: { children: ReactNode }) {
         <nav className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Logo />
-            <span className="font-mono text-sm font-semibold tracking-widest text-ink uppercase">
+            <span className="font-display text-base font-semibold tracking-tight text-ink">
               Fulcrum
             </span>
           </Link>
-          <Link
-            href="/"
-            className="text-sm text-ink-muted transition-colors hover:text-ink"
-          >
-            Back to site
-          </Link>
+          <div className="flex items-center gap-3">
+            <ThemeSwitch />
+            <Link
+              href="/"
+              className="text-sm text-ink-muted transition-colors hover:text-ink"
+            >
+              Back to site
+            </Link>
+          </div>
         </nav>
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-6 py-12">
+      <main id="main-content" tabIndex={-1} className="focus:outline-none mx-auto w-full max-w-3xl flex-1 px-6 py-12">
         {!isConfigured && (
           <div
             role="alert"

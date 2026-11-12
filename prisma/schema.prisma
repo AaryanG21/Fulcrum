@@ -1,15 +1,8 @@
-// Fulcrum — Website Security Scorecard & Remediation Agent
-// Postgres + Prisma. All access goes through the Prisma query builder
-// (parameterized); there is no raw SQL string concatenation anywhere in src/.
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
 }
 
-// Prisma 7 keeps the connection URL out of the schema entirely: Migrate
-// reads it from prisma.config.ts and the runtime client gets it through
-// the pg driver adapter in src/lib/db.ts.
 datasource db {
   provider = "postgresql"
 }
@@ -20,8 +13,6 @@ enum Role {
 }
 
 enum UserStatus {
-  // Registered, password set, but TOTP enrollment not yet completed.
-  // Cannot hold a full session in this state.
   PENDING_2FA
   ACTIVE
   SUSPENDED
@@ -39,16 +30,8 @@ enum DomainVerificationMethod {
   HTTP_WELL_KNOWN
 }
 
-// What a scan was permitted to do, which is a different question from
-// whether it succeeded.
 enum ScanType {
-  // Every check, including testssl.sh. Requires proven ownership: it opens
-  // hundreds of handshakes against the target and is active probing by any
-  // reasonable definition.
   FULL
-  // One HTTPS GET, and the checks derivable from that single response.
-  // Permitted against any public host because the network footprint is
-  // indistinguishable from a browser visiting the page once.
   HEADERS_ONLY
 }
 
@@ -64,43 +47,27 @@ model User {
   id String @id @default(cuid())
 
   email        String @unique
-  // argon2id hash. Never a reversible encryption of the password.
   passwordHash String
 
   role   Role       @default(USER)
   status UserStatus @default(PENDING_2FA)
 
-  // TOTP shared secret, encrypted at rest with AES-256-GCM using
-  // TOTP_ENCRYPTION_KEY. Never stored in plaintext, never logged.
-  twoFactorSecret    String?
-  twoFactorEnabled   Boolean   @default(false)
-  twoFactorEnrolledAt DateTime?
-  // Highest RFC 6238 time step already spent by this user. Codes at or
-  // below it are rejected, which stops replay of an observed code inside
-  // its validity window — durably, and across app instances.
+  twoFactorSecret       String?
+  twoFactorEnabled      Boolean   @default(false)
+  twoFactorEnrolledAt   DateTime?
   twoFactorLastTimeStep Int?
 
-  // Account lockout state (see lib/auth/lockout.ts).
   failedLoginCount Int       @default(0)
   lockedUntil      DateTime?
   lockedReason     String?
 
-  passwordChangedAt DateTime @default(now())
+  passwordChangedAt DateTime  @default(now())
   lastLoginAt       DateTime?
 
-  // Consent record. Nullable because accounts created before the gate
-  // existed have no record, and inventing a timestamp for them would be
-  // worse than admitting there isn't one.
-  //
-  // Both are set by the same checkbox at registration — one affirmative
-  // action covering two statements — but they are stored separately so a
-  // later re-acceptance of changed Terms does not overwrite the record of
-  // when the age was confirmed.
-  //
-  // No date of birth is collected. Confirming the threshold is what the
-  // purpose requires; the exact date would be more data than is needed.
-  ageConfirmedAt   DateTime?
-  termsAcceptedAt  DateTime?
+  ageConfirmedAt  DateTime?
+  termsAcceptedAt DateTime?
+
+  emailVerifiedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -109,40 +76,34 @@ model User {
   scans         ScanResult[]
   refreshTokens RefreshToken[]
   backupCodes   BackupCode[]
-  // No AuditLog relation by design — see the comment on AuditLog.actorUserId.
+  authTokens    AuthToken[]
+  shareLinks    ShareLink[]
+  schedules     ScanSchedule[]
 
   @@index([status])
   @@index([role])
 }
 
-// One-time recovery codes issued at 2FA enrollment. Stored hashed
-// (argon2id) exactly like passwords — the plaintext is shown to the
-// user once and never again.
 model BackupCode {
-  id       String    @id @default(cuid())
-  userId   String
-  codeHash String
-  usedAt   DateTime?
-  createdAt DateTime @default(now())
+  id        String    @id @default(cuid())
+  userId    String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-// The authorization allowlist. A scan is only ever permitted against a
-// Domain row owned by the requesting user with status VERIFIED.
 model Domain {
   id     String @id @default(cuid())
   userId String
 
-  // Normalized lowercase registrable hostname, punycode/IDNA-encoded.
   hostname String
 
   verificationStatus DomainVerificationStatus @default(PENDING)
   verificationMethod DomainVerificationMethod @default(DNS_TXT)
-  // Random challenge value the user must publish. Not a secret that
-  // grants access by itself, but rotated on every re-verification.
   verificationToken  String
   verifiedAt         DateTime?
   revokedAt          DateTime?
@@ -152,16 +113,13 @@ model Domain {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  scans ScanResult[]
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scans    ScanResult[]
+  schedule ScanSchedule?
 
-  // A hostname may be claimed by at most one user.
   @@unique([hostname])
   @@index([userId])
   @@index([verificationStatus])
-  // authorizeScan filters on owner AND status together, and it is the most
-  // security-critical query in the app. Two single-column indexes made
-  // Postgres choose one and filter the rest; this is the access pattern.
   @@index([userId, verificationStatus])
 }
 
@@ -169,43 +127,25 @@ model ScanResult {
   id     String @id @default(cuid())
   userId String
 
-  // Null for a HEADERS_ONLY scan, which by definition has no registered
-  // domain behind it.
   domainId String?
 
-  // The hostname as it was scanned. Denormalized deliberately, and not
-  // only because a headers-only scan has no Domain row to join to: it is
-  // the forensic fact. Reading it back through the relation would show
-  // whatever that domain row says now, or nothing once it is removed —
-  // which is exactly what happened to the first scan of this project's own
-  // site when its registration was replaced.
   hostname String
 
   scanType ScanType   @default(FULL)
   status   ScanStatus @default(QUEUED)
 
-  // Normalized Finding[] produced by the agent. Untrusted scanned text
-  // lives inside these objects and is only ever rendered as data.
   findings Json @default("[]")
 
-  // Composite risk score 0-100 and the derived A-F grade.
   score Int?
   grade String?
 
-  // Effort budget the user set for this run, and what the ranked plan
-  // actually consumed.
   budgetLimit Int
   budgetUsed  Int @default(0)
 
-  // Ranked remediation steps with the agent's stated reasoning.
   remediationPlan Json @default("[]")
 
-  // Checks that did not complete, with why. Persisted rather than derived:
-  // the scorecard has to be able to say "TLS posture is unknown" instead of
-  // implying a clean result, and that is only honest if the record survives.
   degradedSteps Json @default("[]")
 
-  // Provenance for the pinned external tool.
   testsslVersion String?
   refusalReason  String?
   errorMessage   String?
@@ -214,47 +154,28 @@ model ScanResult {
   completedAt DateTime?
   createdAt   DateTime  @default(now())
 
-  domain Domain? @relation(fields: [domainId], references: [id], onDelete: SetNull)
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain     Domain?     @relation(fields: [domainId], references: [id], onDelete: SetNull)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shareLinks ShareLink[]
 
   @@index([domainId, createdAt])
   @@index([userId, createdAt])
   @@index([hostname, createdAt])
-  // For the stalled-scan reaper, which looks for RUNNING rows older than
-  // a threshold. Without it that is a sequential scan on every boot.
   @@index([status, startedAt])
 }
 
-// Append-only. The initial migration installs a Postgres trigger that
-// rejects UPDATE and DELETE on this table, so immutability is enforced
-// by the database rather than by convention.
 model AuditLog {
   id String @id @default(cuid())
 
-  // Null for pre-authentication events (e.g. failed login for an
-  // address that does not resolve to an account).
-  //
-  // Deliberately NOT a foreign key. An append-only log cannot hold a
-  // relation to a mutable table: `onDelete: SetNull` would issue an UPDATE
-  // against this table (blocked by the immutability trigger, making users
-  // undeletable), and `Cascade` would erase the very history that matters
-  // most when an account is removed. The id is kept as an opaque string
-  // that outlives the account.
   actorUserId String?
-  // The actor's email AS IT WAS when the action happened. Denormalized on
-  // purpose: that is the forensic fact. Reading it back through a join
-  // would show whatever the account is called now, or nothing at all if it
-  // has since been deleted.
-  actorEmail String?
+  actorEmail  String?
   action      String
   targetType  String
   targetId    String?
 
   ipAddress String?
   userAgent String?
-  // Structured context. Never contains passwords, TOTP secrets, or
-  // full tokens — see lib/audit.ts for the redaction rules.
-  metadata Json?
+  metadata  Json?
 
   createdAt DateTime @default(now())
 
@@ -267,17 +188,13 @@ model RefreshToken {
   id     String @id @default(cuid())
   userId String
 
-  // SHA-256 of the opaque token. The raw token only ever exists in the
-  // httpOnly cookie.
   tokenHash String @unique
 
-  // Rotation family: reuse of an already-rotated token revokes the
-  // entire family (stolen-token detection).
   familyId     String
   replacedById String?
 
-  expiresAt DateTime
-  revokedAt DateTime?
+  expiresAt     DateTime
+  revokedAt     DateTime?
   revokedReason String?
 
   ipAddress String?
@@ -291,8 +208,6 @@ model RefreshToken {
   @@index([expiresAt])
 }
 
-// Drives per-account + per-IP rate limiting and the user-visible login
-// history. Stores no credential material.
 model LoginAttempt {
   id String @id @default(cuid())
 
@@ -301,7 +216,6 @@ model LoginAttempt {
   ipAddress String?
   userAgent String?
 
-  // PASSWORD | TOTP | BACKUP_CODE | REFRESH | REAUTH
   stage   String
   success Boolean
   reason  String?
@@ -311,4 +225,60 @@ model LoginAttempt {
   @@index([email, createdAt])
   @@index([ipAddress, createdAt])
   @@index([userId, createdAt])
+}
+
+enum AuthTokenPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model AuthToken {
+  id        String           @id @default(cuid())
+  userId    String
+  purpose   AuthTokenPurpose
+  tokenHash String           @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+}
+
+model ShareLink {
+  id        String    @id @default(cuid())
+  scanId    String
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  scan ScanResult @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([userId])
+}
+
+model ScanSchedule {
+  id                 String    @id @default(cuid())
+  domainId           String    @unique
+  userId             String
+  intervalDays       Int
+  budget             Int       @default(15)
+  notifyOnRegression Boolean   @default(true)
+  enabled            Boolean   @default(true)
+  nextRunAt          DateTime
+  lastRunAt          DateTime?
+  pausedReason       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  domain Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([enabled, nextRunAt])
 }

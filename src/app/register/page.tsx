@@ -1,50 +1,32 @@
 import Link from "next/link";
-import { SiteFooter } from "@/components/site-footer";
+import { AuthShell } from "@/components/auth-shell";
 import { RegisterForm } from "@/app/register/register-form";
-import { Logo } from "@/components/logo";
+import { AuthenticatorNotice } from "@/components/authenticator-notice";
 
-export const metadata = { title: "Create account — Fulcrum" };
+export const metadata = {
+  title: "Create account",
+  description:
+    "Create a free Fulcrum account to scan domains you control and get a graded, ranked remediation plan.",
+  robots: { index: true, follow: true },
+  alternates: { canonical: "/register" },
+};
 
-// Rendered per request, not prerendered.
-//
-// The CSP in src/proxy.ts carries a per-request nonce, and `'strict-dynamic'`
-// makes browsers ignore the `'self'` source expression for scripts. A page
-// prerendered at build time has no request and therefore no nonce, so its
-// script tags are emitted bare and every one of them is blocked — the page
-// ships with no working JavaScript at all. That failure is invisible in
-// `next dev`, which does not prerender, and it only appears in a production
-// build. Opting out of static generation is what keeps the nonce and the
-// markup on the same request.
 export const dynamic = "force-dynamic";
-
 
 export default function RegisterPage() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="border-b border-line">
-        <div className="mx-auto flex max-w-6xl items-center px-6 py-4">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Logo />
-            <span className="font-mono text-sm font-semibold tracking-widest text-ink uppercase">
-              Fulcrum
-            </span>
+    <AuthShell
+      below={
+        <>
+          Already registered?{" "}
+          <Link href="/login" className="text-signal-ink hover:underline">
+            Sign in
           </Link>
-        </div>
-      </header>
-
-      <main className="flex flex-1 items-center justify-center px-6 py-16">
-        <div className="w-full max-w-md">
-          <RegisterForm />
-          <p className="mt-6 text-center text-sm text-ink-muted">
-            Already registered?{" "}
-            <Link href="/login" className="text-signal hover:underline">
-              Sign in
-            </Link>
-          </p>
-        </div>
-      </main>
-
-      <SiteFooter />
-    </div>
+        </>
+      }
+    >
+      <AuthenticatorNotice />
+      <RegisterForm />
+    </AuthShell>
   );
 }

@@ -6,24 +6,21 @@ import { AppShell } from "@/components/app-shell";
 import { Panel } from "@/components/ui";
 import { Scorecard } from "@/components/scorecard";
 import { ScanStatusWatcher } from "./scan-status-watcher";
+import { ScanActions } from "@/components/scan-actions";
+import { compareScans } from "@/lib/scans/compare";
 import type { Finding, Grade, RemediationPlan } from "@/lib/agent/types";
+import { loginRedirectUrl } from "@/lib/safe-redirect";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Scorecard — Fulcrum" };
+export const metadata = { title: "Scorecard" };
 
-/**
- * One scan's scorecard.
- *
- * Ownership is part of the query, so another user's scan is indistinguishable
- * from one that does not exist.
- */
 export default async function ScanPage({
   params,
 }: {
   params: Promise<{ scanId: string }>;
 }) {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect(loginRedirectUrl(`/scans/${(await params).scanId}`));
 
   const { scanId } = await params;
 
@@ -57,7 +54,7 @@ export default async function ScanPage({
   if (scan.status !== "COMPLETED") {
     return (
       <AppShell email={session.email} isAdmin={isAdmin} active="dashboard">
-        <Panel title={`Scan of ${scan.hostname}`}>
+        <Panel as="h1" title={`Scan of ${scan.hostname}`}>
           <p className="text-sm text-ink-muted">
             This scan is <span className="font-mono text-ink">{scan.status.toLowerCase()}</span>.
           </p>
@@ -70,17 +67,16 @@ export default async function ScanPage({
           {scan.errorMessage && (
             <p className="mt-2 text-sm text-sev-critical">{scan.errorMessage}</p>
           )}
-          {/* Only RUNNING and QUEUED can still change. Polling a FAILED or
-              REFUSED scan would never terminate on a status transition. */}
           {(scan.status === "RUNNING" || scan.status === "QUEUED") && (
             <ScanStatusWatcher
               scanId={scan.id}
+              status={scan.status}
               startedAtMs={(scan.startedAt ?? scan.createdAt).getTime()}
             />
           )}
           <Link
             href="/dashboard"
-            className="mt-4 inline-flex text-sm text-signal hover:underline"
+            className="mt-4 inline-flex text-sm text-signal-ink hover:underline"
           >
             Back to dashboard
           </Link>
@@ -89,9 +85,6 @@ export default async function ScanPage({
     );
   }
 
-  // The stored JSON is shaped by our own agent, but it is still data read
-  // back from a database column rather than a typed value, so the cast is
-  // explicit and narrow.
   const findings = (scan.findings ?? []) as unknown as Finding[];
   const plan = (scan.remediationPlan ?? {
     budgetLimit: scan.budgetLimit,
@@ -108,14 +101,76 @@ export default async function ScanPage({
     reason: string;
   }>;
 
+  const previous = await prisma.scanResult.findFirst({
+    where: {
+      userId: session.id,
+      hostname: scan.hostname,
+      scanType: scan.scanType,
+      status: "COMPLETED",
+      createdAt: { lt: scan.createdAt },
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      grade: true,
+      score: true,
+      findings: true,
+      completedAt: true,
+      createdAt: true,
+    },
+  });
+
+  const changes =
+    previous && previous.grade && previous.score !== null
+      ? {
+          previous: {
+            id: previous.id,
+            grade: previous.grade,
+            score: previous.score,
+            scannedAt: (previous.completedAt ?? previous.createdAt)
+              .toISOString()
+              .slice(0, 16)
+              .replace("T", " "),
+          },
+          comparison: compareScans(
+            (previous.findings ?? []) as unknown as Finding[],
+            findings,
+          ),
+        }
+      : undefined;
+
+  const activeLinks = await prisma.shareLink.count({
+    where: {
+      scanId: scan.id,
+      userId: session.id,
+      revokedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+  });
+
   return (
     <AppShell email={session.email} isAdmin={isAdmin} active="dashboard">
-      <Link
-        href="/dashboard"
-        className="mb-4 inline-flex text-sm text-ink-muted hover:text-ink"
-      >
-        ← Back to dashboard
-      </Link>
+      <nav aria-label="Breadcrumb" className="mb-4 text-sm text-ink-muted print:hidden">
+        <ol className="flex flex-wrap items-center gap-1.5">
+          <li>
+            <Link href="/dashboard" className="hover:text-ink hover:underline">
+              Dashboard
+            </Link>
+          </li>
+          <li aria-hidden>/</li>
+          <li>
+            <Link href="/scans" className="hover:text-ink hover:underline">
+              Scan history
+            </Link>
+          </li>
+          <li aria-hidden>/</li>
+          <li aria-current="page" className="font-mono text-ink">
+            {scan.hostname}
+          </li>
+        </ol>
+      </nav>
+
+      <ScanActions scanId={scan.id} activeLinks={activeLinks} />
 
       <Scorecard
         hostname={scan.hostname}
@@ -130,6 +185,7 @@ export default async function ScanPage({
           .toISOString()
           .slice(0, 16)
           .replace("T", " ")}
+        changes={changes}
       />
     </AppShell>
   );

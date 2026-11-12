@@ -13,20 +13,14 @@ import {
 } from "@/lib/domains/verification";
 import { isVerificationStale } from "@/lib/domains/allowlist";
 import { getEnv } from "@/lib/env";
+import { loginRedirectUrl } from "@/lib/safe-redirect";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Dashboard — Fulcrum" };
+export const metadata = { title: "Dashboard" };
 
-/**
- * User dashboard.
- *
- * The session is resolved server-side before anything renders, and every
- * query below is scoped by that session's user id. There is no client-side
- * "am I logged in?" check standing in for authorization.
- */
 export default async function DashboardPage() {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect(loginRedirectUrl("/dashboard"));
 
   const [domains, scans] = await Promise.all([
     prisma.domain.findMany({
@@ -40,6 +34,15 @@ export default async function DashboardPage() {
         verificationToken: true,
         verifiedAt: true,
         createdAt: true,
+        schedule: {
+          select: {
+            intervalDays: true,
+            notifyOnRegression: true,
+            enabled: true,
+            nextRunAt: true,
+            pausedReason: true,
+          },
+        },
       },
     }),
     prisma.scanResult.findMany({
@@ -62,9 +65,6 @@ export default async function DashboardPage() {
     (d) => d.verificationStatus === "VERIFIED",
   ).length;
 
-  // Computed here, not in the browser: the TTL is server configuration, and
-  // the client must never be the thing that decides a domain is scannable.
-  // This is presentation only — authorizeScan runs the same check again.
   const ttlDays = getEnv().DOMAIN_VERIFICATION_TTL_DAYS;
   const isStale = (verifiedAt: Date | null) =>
     isVerificationStale(verifiedAt, ttlDays);
@@ -74,7 +74,7 @@ export default async function DashboardPage() {
   ).length;
 
   return (
-    <AppShell email={session.email} isAdmin={session.role === "ADMIN"} active="dashboard">
+    <AppShell email={session.email} isAdmin={session.role === "ADMIN"} active="dashboard" title="Dashboard">
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat
           label="Domains"
@@ -100,6 +100,9 @@ export default async function DashboardPage() {
             stale: d.verificationStatus === "VERIFIED" && isStale(d.verifiedAt),
             verifiedAt: d.verifiedAt?.toISOString() ?? null,
             createdAt: d.createdAt.toISOString(),
+            schedule: d.schedule
+              ? { ...d.schedule, nextRunAt: d.schedule.nextRunAt.toISOString() }
+              : null,
             challenge:
               d.verificationMethod === "DNS_TXT"
                 ? {
@@ -135,7 +138,7 @@ export default async function DashboardPage() {
       <div className="mt-6">
         <Panel
           title="Scan history"
-          description="Full scans of domains you verified, and headers-only checks."
+          description="Your latest ten. Full scans of domains you verified, and headers-only checks."
         >
           {scans.length === 0 ? (
             <p className="text-sm text-ink-muted">
@@ -143,14 +146,15 @@ export default async function DashboardPage() {
               anything unverified, and logs the refusal.
             </p>
           ) : (
-            <table className="w-full text-sm">
+            <table className="data-table w-full text-sm">
+              <caption className="sr-only">Your recent scans, newest first</caption>
               <thead>
                 <tr className="border-b border-line text-left text-xs tracking-wide text-ink-faint uppercase">
-                  <th className="pb-2 font-medium">Host</th>
-                  <th className="pb-2 font-medium">Status</th>
-                  <th className="pb-2 font-medium">Grade</th>
-                  <th className="pb-2 font-medium">Score</th>
-                  <th className="pb-2 font-medium">When</th>
+                  <th scope="col" className="pb-2 font-medium">Host</th>
+                  <th scope="col" className="pb-2 font-medium">Status</th>
+                  <th scope="col" className="pb-2 font-medium">Grade</th>
+                  <th scope="col" className="pb-2 font-medium">Score</th>
+                  <th scope="col" className="pb-2 font-medium">When</th>
                 </tr>
               </thead>
               <tbody>
@@ -159,16 +163,16 @@ export default async function DashboardPage() {
                     <td className="py-2 font-mono">
                       <Link
                         href={`/scans/${scan.id}`}
-                        className="text-signal hover:underline"
+                        className="text-signal-ink hover:underline"
                       >
                         {scan.hostname}
                       </Link>
                       {scan.scanType === "HEADERS_ONLY" && (
                         <span
                           className="ml-2 rounded border border-line-bright px-1.5 py-0.5 text-[10px] tracking-wide text-ink-faint uppercase"
-                          title="Headers only — TLS was not examined"
                         >
                           headers
+                          <span className="sr-only"> only — TLS was not examined</span>
                         </span>
                       )}
                     </td>
@@ -182,6 +186,13 @@ export default async function DashboardPage() {
                 ))}
               </tbody>
             </table>
+          )}
+          {scans.length > 0 && (
+            <p className="mt-4 text-sm">
+              <Link href="/scans" className="text-signal-ink hover:underline">
+                View all scans and how each host has changed →
+              </Link>
+            </p>
           )}
         </Panel>
       </div>

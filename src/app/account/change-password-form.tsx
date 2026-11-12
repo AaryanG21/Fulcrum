@@ -37,7 +37,7 @@ export function ChangePasswordForm() {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form method="post" onSubmit={submit} className="space-y-4">
       {error && <Alert>{error}</Alert>}
       {done && (
         <Alert tone="signal">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/client/api";
 import { Alert, Badge, Busy, Field, Panel, buttonClass, buttonGhostClass, inputClass } from "@/components/ui";
@@ -31,14 +31,6 @@ type PendingAction =
   | { kind: "user"; userId: string; action: "suspend" | "reinstate" | "unlock"; label: string }
   | { kind: "domain"; domainId: string; label: string };
 
-/**
- * Admin actions.
- *
- * Every destructive action routes through the re-authentication dialog:
- * the server requires a fresh password + TOTP proof (requireAdminWithReauth)
- * and will reject the request without one, so this is not merely a
- * confirmation prompt — it is the UI half of a server-enforced control.
- */
 export function AdminConsole({
   currentUserId,
   users,
@@ -65,6 +57,15 @@ export function AdminConsole({
     setError(null);
   }
 
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (pending && !dialog.open) dialog.showModal();
+    if (!pending && dialog.open) dialog.close();
+  }, [pending]);
+
   async function confirm(event: React.FormEvent) {
     event.preventDefault();
     if (!pending) return;
@@ -72,8 +73,6 @@ export function AdminConsole({
     setBusy(true);
     setError(null);
 
-    // Step up first. The reauth cookie it sets is what the action endpoint
-    // checks; without it the next call returns 401 reauth_required.
     const stepUp = await apiFetch("/api/auth/reauth", {
       method: "POST",
       body: { password, code },
@@ -112,12 +111,21 @@ export function AdminConsole({
     <div className="space-y-6">
       {notice && <Alert tone="signal">{notice}</Alert>}
 
-      {pending && (
-        <Panel
-          title="Confirm with re-authentication"
-          description="Destructive actions require your password and a current 2FA code."
-        >
-          <form onSubmit={confirm} className="space-y-4">
+      <dialog
+        ref={dialogRef}
+        aria-label="Confirm with re-authentication"
+        onCancel={(event) => {
+          event.preventDefault();
+          reset();
+        }}
+        className="m-auto w-[min(92vw,34rem)] rounded-lg border border-line-bright bg-surface p-0 text-ink backdrop:bg-black/70"
+      >
+        {pending && (
+          <Panel
+            title="Confirm with re-authentication"
+            description="Destructive actions require your password and a current 2FA code."
+          >
+          <form method="post" onSubmit={confirm} className="space-y-4">
             {error && <Alert>{error}</Alert>}
 
             <p className="text-sm text-ink-muted">
@@ -127,6 +135,7 @@ export function AdminConsole({
             <Field label="Reason" hint="Recorded in the audit log.">
               <input
                 className={inputClass}
+                autoFocus
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 minLength={3}
@@ -168,21 +177,22 @@ export function AdminConsole({
               </button>
             </div>
           </form>
-        </Panel>
-      )}
+          </Panel>
+        )}
+      </dialog>
 
       <Panel title="Users">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="data-table w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs tracking-wide text-ink-faint uppercase">
-                <th className="pb-2 font-medium">Email</th>
-                <th className="pb-2 font-medium">Role</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 font-medium">2FA</th>
-                <th className="pb-2 font-medium">Domains</th>
-                <th className="pb-2 font-medium">Failed</th>
-                <th className="pb-2 font-medium">Actions</th>
+                <th scope="col" className="pb-2 font-medium">Email</th>
+                <th scope="col" className="pb-2 font-medium">Role</th>
+                <th scope="col" className="pb-2 font-medium">Status</th>
+                <th scope="col" className="pb-2 font-medium">2FA</th>
+                <th scope="col" className="pb-2 font-medium">Domains</th>
+                <th scope="col" className="pb-2 font-medium">Failed</th>
+                <th scope="col" className="pb-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -279,14 +289,14 @@ export function AdminConsole({
 
       <Panel title="Domains">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="data-table w-full text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs tracking-wide text-ink-faint uppercase">
-                <th className="pb-2 font-medium">Hostname</th>
-                <th className="pb-2 font-medium">Owner</th>
-                <th className="pb-2 font-medium">Status</th>
-                <th className="pb-2 font-medium">Verified</th>
-                <th className="pb-2 font-medium">Actions</th>
+                <th scope="col" className="pb-2 font-medium">Hostname</th>
+                <th scope="col" className="pb-2 font-medium">Owner</th>
+                <th scope="col" className="pb-2 font-medium">Status</th>
+                <th scope="col" className="pb-2 font-medium">Verified</th>
+                <th scope="col" className="pb-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>

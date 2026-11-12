@@ -7,28 +7,13 @@ import { writeAudit } from "@/lib/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Everything held about the caller, as a JSON file.
- *
- * No step-up here, deliberately: this is a read of data the account page
- * already displays, and putting friction in front of a right people are
- * entitled to exercise is its own kind of dark pattern. Deleting is
- * irreversible and is gated; exporting is not and is not.
- *
- * Credentials are excluded rather than included-and-redacted. The password
- * hash and the encrypted TOTP secret are about the account rather than
- * about the person, exporting them would hand an attacker who briefly held
- * a session something durable, and nobody can do anything useful with
- * either. What is returned is what a person would actually want: their
- * details, their domains, their scan results, and their sign-in history.
- */
 export async function GET(request: NextRequest) {
   const meta = getRequestMeta(request);
 
   const guard = await requireUser(request, { skipCsrf: true, rateLimit: "api" });
   if (!guard.ok) return guard.response;
 
-  const [user, domains, scans, attempts] = await Promise.all([
+  const [user, domains, scans, attempts, schedules, shareLinks] = await Promise.all([
     prisma.user.findUnique({
       where: { id: guard.value.id },
       select: {
@@ -40,6 +25,7 @@ export async function GET(request: NextRequest) {
         twoFactorEnrolledAt: true,
         ageConfirmedAt: true,
         termsAcceptedAt: true,
+        emailVerifiedAt: true,
         passwordChangedAt: true,
         lastLoginAt: true,
         createdAt: true,
@@ -89,6 +75,30 @@ export async function GET(request: NextRequest) {
         createdAt: true,
       },
     }),
+    prisma.scanSchedule.findMany({
+      where: { userId: guard.value.id },
+      select: {
+        intervalDays: true,
+        budget: true,
+        notifyOnRegression: true,
+        enabled: true,
+        nextRunAt: true,
+        lastRunAt: true,
+        pausedReason: true,
+        createdAt: true,
+        domain: { select: { hostname: true } },
+      },
+    }),
+    prisma.shareLink.findMany({
+      where: { userId: guard.value.id },
+      orderBy: { createdAt: "asc" },
+      select: {
+        createdAt: true,
+        expiresAt: true,
+        revokedAt: true,
+        scan: { select: { hostname: true, completedAt: true } },
+      },
+    }),
   ]);
 
   if (!user) return apiError(401, "unauthenticated", "Sign in to continue.");
@@ -101,7 +111,7 @@ export async function GET(request: NextRequest) {
     ipAddress: meta.ipAddress,
     userAgent: meta.userAgent,
     requestId: meta.requestId,
-    metadata: { domains: domains.length, scans: scans.length },
+    metadata: { domains: domains.length, scans: scans.length, schedules: schedules.length },
   });
 
   const payload = {
@@ -116,6 +126,8 @@ export async function GET(request: NextRequest) {
     account: user,
     domains,
     scans,
+    scheduledScans: schedules,
+    shareLinks,
     signInHistory: attempts,
   };
 

@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-/**
- * Counts assertions per test file and prints a summary.
- *
- * Why this exists: every assertion in tests/ is hand-written by the
- * author, and the committed files are scaffolds whose `it` bodies are
- * `// TODO` comments. Vitest treats an empty test body as a pass, so the
- * suite reports hundreds of passing tests while verifying nothing.
- *
- * That is disclosed in tests/README.md and in the main README, but a CI
- * run showing a green suite undoes the disclosure — nobody reads a
- * caveat in a file when the badge says passing. This turns it into a
- * number.
- *
- * It never fails the build. Enforcing a threshold would block all work
- * until the assertions are written; the goal is visibility, not a gate.
- */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
@@ -76,7 +60,6 @@ if (totalAsserts === 0) {
 const report = lines.join("\n");
 console.log(report);
 
-// Surface it on the workflow summary page too, where it is actually seen.
 if (process.env.GITHUB_STEP_SUMMARY) {
   const { appendFileSync } = await import("node:fs");
   appendFileSync(

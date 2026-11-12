@@ -2,17 +2,6 @@ import { z } from "zod";
 import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH } from "@/lib/auth/password";
 import { normalizeHostname } from "@/lib/validation/hostname";
 
-/**
- * Request schemas.
- *
- * Policy: reject, do not sanitize-and-continue. Silently "cleaning" input
- * means the thing that gets stored is not the thing the user sent, and it
- * is how filter-bypass bugs are born. The one place we transform rather
- * than reject is hostname normalization, which is a documented canonical
- * form (lowercase + IDNA) applied before any allowlist comparison — and it
- * still rejects anything that fails to canonicalize.
- */
-
 export const emailSchema = z
   .string()
   .trim()
@@ -40,14 +29,6 @@ export const backupCodeSchema = z
 export const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
-  /**
-   * The age and terms confirmation, validated on the server.
-   *
-   * `z.literal(true)` rather than `z.boolean()`: a boolean would accept
-   * false and leave the route to remember to check it. A checkbox the
-   * client can simply omit is not a consent record, and a consent record
-   * that depends on the UI having rendered correctly is not one either.
-   */
   acceptedTerms: z.literal(true, {
     message:
       "You must confirm you are 18 or older and accept the Terms and Privacy Policy.",
@@ -68,6 +49,31 @@ export const twoFactorVerifySchema = z
     message: "Provide either a 6-digit code or a backup code, not both",
   });
 
+export const emailedTokenSchema = z.string().trim().min(20).max(200);
+
+export const emailOnlySchema = z.object({ email: emailSchema });
+
+export const verifyEmailSchema = z.object({ token: emailedTokenSchema });
+
+export const resetPasswordSchema = z
+  .object({
+    token: emailedTokenSchema,
+    password: passwordSchema,
+    code: totpCodeSchema.optional(),
+    backupCode: backupCodeSchema.optional(),
+  })
+  .refine((v) => !(v.code && v.backupCode), {
+    message: "Provide either a 6-digit code or a backup code, not both",
+  });
+
+export const tryItSchema = z.object({ hostname: z.string().trim().min(1).max(253) });
+
+export const scanScheduleSchema = z.object({
+  intervalDays: z.union([z.literal(7), z.literal(30)]),
+  budget: z.number().int().min(1).max(1000).default(15),
+  notifyOnRegression: z.boolean().default(true),
+});
+
 export const reauthSchema = z.object({
   password: z.string().min(1).max(MAX_PASSWORD_LENGTH),
   code: totpCodeSchema,
@@ -83,14 +89,6 @@ export const changePasswordSchema = z
     path: ["newPassword"],
   });
 
-/**
- * Hostname input for the authorization allowlist.
- *
- * This is the single most security-relevant validator in the app: it is
- * what stands between "scan a domain I proved I own" and "use this service
- * to scan someone else". It normalizes to a canonical form and rejects
- * anything ambiguous, rather than trying to strip bad characters out.
- */
 export const hostnameSchema = z
   .string()
   .trim()
@@ -110,14 +108,6 @@ export const addDomainSchema = z.object({
   method: z.enum(["DNS_TXT", "HTTP_WELL_KNOWN"]).default("DNS_TXT"),
 });
 
-/**
- * A headers-only check takes a hostname rather than a registered domain id.
- *
- * It goes through the same hostnameSchema as registration, so the same
- * canonicalization and the same refusals apply — no scheme, no port, no
- * path, no IP literal, no internal suffix. Nothing here is relaxed because
- * the target is not owned by the caller; if anything that matters more.
- */
 export const publicScanRequestSchema = z.object({
   hostname: hostnameSchema,
   budget: z.coerce.number().int().min(1).max(1000),
@@ -125,10 +115,6 @@ export const publicScanRequestSchema = z.object({
 
 export const scanRequestSchema = z.object({
   domainId: z.string().min(1).max(64),
-  /**
-   * "Fix effort budget" in arbitrary effort points. The agent ranks
-   * remediations and fills the budget greedily by risk-reduction per point.
-   */
   budget: z.coerce.number().int().min(1).max(1000),
 });
 
@@ -147,13 +133,6 @@ export const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 
-/**
- * Parses a JSON request body against a schema.
- *
- * Returns a discriminated result rather than throwing, so routes handle
- * validation failure as an ordinary 400 path. Field errors are returned to
- * the client for form UX; they never echo the submitted values back.
- */
 export async function parseJsonBody<S extends z.ZodType>(
   request: Request,
   schema: S,

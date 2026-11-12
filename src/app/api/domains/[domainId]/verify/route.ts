@@ -8,14 +8,6 @@ import { writeAudit } from "@/lib/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Runs the ownership challenge for one domain.
- *
- * Rate-limited because each call performs an outbound DNS or HTTPS request
- * on a user-supplied hostname, and both the attempt and its outcome are
- * audited — a burst of failed verifications against many hostnames is
- * exactly the pattern worth being able to see after the fact.
- */
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ domainId: string }> },
@@ -39,8 +31,6 @@ export async function POST(
     },
   });
 
-  // Ownership mismatch returns the same 404 as a missing row, so this
-  // endpoint cannot enumerate other users' domain IDs.
   if (!domain || domain.userId !== guard.value.id) {
     return apiError(404, "not_found", "That domain is not registered to you.");
   }

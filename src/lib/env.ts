@@ -1,15 +1,6 @@
 import "server-only";
 import { z } from "zod";
 
-/**
- * Server environment.
- *
- * Every secret the app needs is read here and nowhere else. The process
- * refuses to start if anything is missing or too weak, which is the point:
- * a misconfigured deploy should fail loudly at boot rather than quietly
- * fall back to a default key.
- */
-
 const base64Key = (bytes: number, label: string) =>
   z
     .string()
@@ -30,20 +21,14 @@ const envSchema = z.object({
 
   DATABASE_URL: z.string().min(1).startsWith("postgresql://"),
 
-  // HS256 signing key for short-lived access / mfa-pending / reauth tokens.
   JWT_SIGNING_KEY: base64Key(32, "JWT_SIGNING_KEY"),
 
-  // AES-256-GCM key protecting TOTP shared secrets at rest.
   TOTP_ENCRYPTION_KEY: base64Key(32, "TOTP_ENCRYPTION_KEY"),
 
-  // Absolute origin of the deployment. Used for cookie scoping, CSRF
-  // origin checks, and the TOTP issuer label.
   APP_ORIGIN: z.string().url(),
 
   APP_NAME: z.string().default("Fulcrum"),
 
-  // Access tokens are deliberately short-lived; the refresh token is the
-  // long-lived credential and it is rotated on every use.
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
   REFRESH_TOKEN_TTL_SECONDS: z.coerce
     .number()
@@ -51,26 +36,12 @@ const envSchema = z.object({
     .min(3600)
     .max(60 * 60 * 24 * 30)
     .default(60 * 60 * 24 * 7),
-  // Window between password+TOTP and the second factor challenge.
   MFA_PENDING_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
-  // How long a re-authentication stays fresh for destructive admin actions.
   REAUTH_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
 
-  // Account lockout policy.
   MAX_FAILED_LOGINS: z.coerce.number().int().min(3).max(20).default(5),
   LOCKOUT_BASE_SECONDS: z.coerce.number().int().min(30).default(900),
 
-  // How long a proven domain ownership keeps authorising TLS scans.
-  //
-  // Ownership is a fact about the present, not a permanent property. A
-  // registration lapses, a domain is sold, and whoever verified it last
-  // year would otherwise keep the right to open hundreds of connections
-  // against a host that is now someone else's. Re-running the challenge
-  // costs the user one DNS record or one file.
-  //
-  // There is no sentinel for "never expire": an operator who truly wants
-  // that sets a century and leaves the reason in their own config, rather
-  // than it happening by accident because a value was left at zero.
   DOMAIN_VERIFICATION_TTL_DAYS: z.coerce
     .number()
     .int()
@@ -78,35 +49,75 @@ const envSchema = z.object({
     .max(36_500)
     .default(90),
 
-  // Path to the pinned testssl.sh checkout (see README).
+  SCAN_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(2),
+
+  SCAN_QUEUE_MAX_DEPTH: z.coerce.number().int().min(1).max(10_000).default(50),
+
   TESTSSL_PATH: z.string().default("./vendor/testssl.sh/testssl.sh"),
   TESTSSL_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(1_800_000).default(300_000),
 
-  // Trust X-Forwarded-For only when a reverse proxy you control actually
-  // sets it. Defaults off: a spoofable client IP would let an attacker
-  // sidestep per-IP rate limiting.
+  EMAIL_TRANSPORT: z.enum(["smtp", "api", "log"]).default("log"),
+  EMAIL_API_PROVIDER: z.enum(["brevo", "resend"]).optional(),
+  EMAIL_API_KEY: z.string().min(8).optional(),
+  EMAIL_FROM: z.string().min(3).default("Fulcrum <no-reply@localhost>"),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+  SMTP_SECURE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+
+  EMAIL_VERIFICATION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+  PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().min(10).max(1440).default(60),
+
   TRUST_PROXY_HEADERS: z
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
 
-  // How many reverse proxies you run in front of this app.
-  //
-  // This number is load-bearing, not cosmetic. X-Forwarded-For is a list
-  // that each hop appends to, so the entries a client can forge are on the
-  // LEFT and the ones your own infrastructure wrote are on the RIGHT.
-  // Reading the left-most entry — the obvious-looking choice — reads
-  // attacker-controlled data. The client address is the entry this many
-  // places in from the right, and knowing the hop count is the only way to
-  // find it.
-  //
-  // One Caddy/nginx/ALB in front: 1. Cloudflare in front of that: 2.
   TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
 })
   .superRefine((env, ctx) => {
-    // Trusting the header without saying how many hops to skip would send
-    // us back to reading the left-most, forgeable entry. Fail loudly at
-    // boot rather than silently rate-limiting on an attacker's string.
+    if (
+      env.NODE_ENV === "production" &&
+      env.EMAIL_TRANSPORT === "log" &&
+      process.env.NEXT_PHASE !== "phase-production-build"
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["EMAIL_TRANSPORT"],
+        message:
+          'must be "smtp" or "api" in production — the "log" transport prints password-reset links to stdout',
+      });
+    }
+
+    if (env.EMAIL_TRANSPORT === "api") {
+      if (!env.EMAIL_API_PROVIDER) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["EMAIL_API_PROVIDER"],
+          message: 'is required when EMAIL_TRANSPORT is "api"',
+        });
+      }
+      if (!env.EMAIL_API_KEY) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["EMAIL_API_KEY"],
+          message: 'is required when EMAIL_TRANSPORT is "api"',
+        });
+      }
+    }
+
+    if (env.EMAIL_TRANSPORT === "smtp" && !env.SMTP_HOST) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["SMTP_HOST"],
+        message: 'is required when EMAIL_TRANSPORT is "smtp"',
+      });
+    }
+
     if (env.TRUST_PROXY_HEADERS && env.TRUSTED_PROXY_HOPS === 0) {
       ctx.addIssue({
         code: "custom",
@@ -129,7 +140,6 @@ export function getEnv(): Env {
     const issues = parsed.error.issues
       .map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`)
       .join("\n");
-    // The message names variables, never values.
     throw new Error(`Invalid server environment:\n${issues}`);
   }
 
@@ -137,7 +147,6 @@ export function getEnv(): Env {
   return cached;
 }
 
-/** Test-only escape hatch so suites can re-parse a mutated environment. */
 export function resetEnvCache(): void {
   cached = null;
 }

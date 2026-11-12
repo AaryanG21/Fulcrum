@@ -10,14 +10,6 @@ import { writeAudit } from "@/lib/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Password change.
- *
- * Changing a password revokes every existing session — that is the point of
- * changing it after a suspected compromise — and then issues a fresh
- * session to the browser that made the change, so the user is not logged
- * out of the tab they are sitting in.
- */
 export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
 

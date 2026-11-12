@@ -1,42 +1,9 @@
-/**
- * Hand-authored icon set.
- *
- * Inline SVG rather than an icon package, for three reasons that all point
- * the same way:
- *
- *   1. The CSP is `default-src 'self'` with no third-party hosts, and the
- *      product's own landing page claims there is no third-party script
- *      anywhere. An icon dependency would make that claim false to win back
- *      about ten small shapes.
- *   2. Inline SVG is markup, not a fetched resource, so `img-src` never
- *      applies and there is no request to block, cache or fail.
- *   3. These are server components. They cost RSC payload bytes, not
- *      client-side JavaScript.
- *
- * ── The rule these exist under ──────────────────────────────────────────
- *
- * An icon here never carries information that is not also present as text
- * beside it, and no control is icon-only. They differentiate and they draw
- * the eye; they do not communicate. That is why every one of them is
- * `aria-hidden` without exception — a screen reader loses nothing by
- * skipping all of them, which is the test of whether the rule was followed.
- *
- * `focusable="false"` is there for older Edge/IE, which otherwise put SVG
- * elements in the tab order.
- */
-
 import type { ReactNode } from "react";
 
 interface IconProps {
-  /** Tailwind sizing/colour classes. Defaults to a 16px square. */
   className?: string;
 }
 
-/**
- * Shared chassis. Stroke-based at a consistent 1.5 weight so the set reads
- * as one family, and `currentColor` so an icon inherits whatever text colour
- * its container already sets — no icon needs its own colour prop.
- */
 function Icon({
   className = "h-4 w-4",
   children,
@@ -58,7 +25,6 @@ function Icon({
   );
 }
 
-/** Transport and header posture. */
 export function ShieldCheck(props: IconProps) {
   return (
     <Icon {...props}>
@@ -68,7 +34,6 @@ export function ShieldCheck(props: IconProps) {
   );
 }
 
-/** Software version identification. */
 export function Chip(props: IconProps) {
   return (
     <Icon {...props}>
@@ -78,7 +43,6 @@ export function Chip(props: IconProps) {
   );
 }
 
-/** Effort budget — and the lever the product is named after. */
 export function Scale(props: IconProps) {
   return (
     <Icon {...props}>
@@ -90,7 +54,6 @@ export function Scale(props: IconProps) {
   );
 }
 
-/** Proof of ownership. */
 export function KeyLock(props: IconProps) {
   return (
     <Icon {...props}>
@@ -101,7 +64,6 @@ export function KeyLock(props: IconProps) {
   );
 }
 
-/** Something needs attention. */
 export function AlertTriangle(props: IconProps) {
   return (
     <Icon {...props}>
@@ -112,7 +74,6 @@ export function AlertTriangle(props: IconProps) {
   );
 }
 
-/** A qualification or caveat. */
 export function InfoCircle(props: IconProps) {
   return (
     <Icon {...props}>
@@ -123,7 +84,6 @@ export function InfoCircle(props: IconProps) {
   );
 }
 
-/** A check passed, or a domain is verified. */
 export function Check(props: IconProps) {
   return (
     <Icon {...props}>
@@ -132,7 +92,6 @@ export function Check(props: IconProps) {
   );
 }
 
-/** Refused, or failed. */
 export function X(props: IconProps) {
   return (
     <Icon {...props}>
@@ -141,7 +100,6 @@ export function X(props: IconProps) {
   );
 }
 
-/** Elapsed time, and work still running. */
 export function Clock(props: IconProps) {
   return (
     <Icon {...props}>
@@ -151,7 +109,6 @@ export function Clock(props: IconProps) {
   );
 }
 
-/** Forward navigation. */
 export function ArrowRight(props: IconProps) {
   return (
     <Icon {...props}>

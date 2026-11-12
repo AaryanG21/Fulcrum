@@ -1,9 +1,12 @@
-import type { ReactNode } from "react";
-
-/**
- * Small shared primitives. Deliberately plain — a security console should
- * read like an instrument panel, not a marketing page.
- */
+import Link from "next/link";
+import {
+  cloneElement,
+  useId,
+  type ButtonHTMLAttributes,
+  type ComponentProps,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 export function Panel({
   title,
@@ -11,33 +14,33 @@ export function Panel({
   action,
   children,
   className = "",
+  as: Heading = "h2",
 }: {
   title?: string;
   description?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  as?: "h1" | "h2";
 }) {
   return (
-    <section
-      className={`rounded-lg border border-line bg-surface ${className}`}
-    >
+    <section className={`glass rounded-2xl ${className}`}>
       {(title || action) && (
-        <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
-          <div>
+        <header className="flex items-start justify-between gap-4 border-b border-line/70 px-6 py-5">
+          <div className="min-w-0">
             {title && (
-              <h2 className="text-sm font-semibold tracking-wide text-ink uppercase">
+              <Heading className="rule-accent inline-block pb-2 font-display text-lg font-semibold tracking-tight text-ink">
                 {title}
-              </h2>
+              </Heading>
             )}
             {description && (
-              <p className="mt-1 text-sm text-ink-muted">{description}</p>
+              <p className="mt-2 text-sm leading-relaxed text-ink-muted">{description}</p>
             )}
           </div>
-          {action}
+          {action && <div className="shrink-0">{action}</div>}
         </header>
       )}
-      <div className="px-5 py-4">{children}</div>
+      <div className="px-6 py-5">{children}</div>
     </section>
   );
 }
@@ -45,7 +48,7 @@ export function Panel({
 type Tone = "signal" | "critical" | "high" | "medium" | "low" | "neutral";
 
 const TONE_CLASS: Record<Tone, string> = {
-  signal: "border-signal/40 bg-signal/10 text-signal",
+  signal: "border-signal/40 bg-signal/10 text-signal-ink",
   critical: "border-sev-critical/40 bg-sev-critical/10 text-sev-critical",
   high: "border-sev-high/40 bg-sev-high/10 text-sev-high",
   medium: "border-sev-medium/40 bg-sev-medium/10 text-sev-medium",
@@ -62,7 +65,7 @@ export function Badge({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-xs ${TONE_CLASS[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[11px] tracking-wide ${TONE_CLASS[tone]}`}
     >
       {children}
     </span>
@@ -79,10 +82,10 @@ export function Stat({
   hint?: string;
 }) {
   return (
-    <div className="rounded-lg border border-line bg-surface px-4 py-3">
-      <div className="text-xs tracking-wide text-ink-faint uppercase">{label}</div>
-      <div className="mt-1 font-mono text-2xl text-ink">{value}</div>
-      {hint && <div className="mt-0.5 text-xs text-ink-faint">{hint}</div>}
+    <div className="glass rounded-2xl px-5 py-4">
+      <div className="eyebrow text-ink-faint">{label}</div>
+      <div className="display mt-2 text-3xl text-ink">{value}</div>
+      {hint && <div className="mt-1.5 text-xs text-ink-faint">{hint}</div>}
     </div>
   );
 }
@@ -96,30 +99,82 @@ export function Field({
   label: string;
   hint?: string;
   error?: string;
-  children: ReactNode;
+  children: ReactElement<{
+    id?: string;
+    "aria-describedby"?: string;
+    "aria-invalid"?: boolean;
+  }>;
 }) {
+  const generated = useId();
+  const controlId = children.props.id ?? generated;
+  const hintId = `${controlId}-hint`;
+  const errorId = `${controlId}-error`;
+
+  const describedBy =
+    [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined;
+
+  const control = cloneElement(children, {
+    id: controlId,
+    "aria-describedby": describedBy,
+    "aria-invalid": error ? true : undefined,
+  });
+
   return (
-    <label className="block">
-      <span className="block text-sm font-medium text-ink">{label}</span>
-      {hint && <span className="mt-0.5 block text-xs text-ink-faint">{hint}</span>}
-      <div className="mt-1.5">{children}</div>
-      {error && (
-        <span role="alert" className="mt-1.5 block text-xs text-sev-critical">
-          {error}
-        </span>
+    <div>
+      <label htmlFor={controlId} className="block text-sm font-medium text-ink">
+        {label}
+      </label>
+      {hint && (
+        <p id={hintId} className="mt-0.5 text-xs text-ink-faint">
+          {hint}
+        </p>
       )}
-    </label>
+      <div className="mt-1.5">{control}</div>
+      {error && (
+        <p id={errorId} role="alert" className="mt-1.5 text-xs text-sev-critical">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
 export const inputClass =
-  "w-full rounded-md border border-line-bright bg-surface-2 px-3 py-2 text-ink placeholder:text-ink-faint focus:border-signal focus:outline-none";
+  "w-full rounded-xl border border-line-bright/70 bg-surface px-3.5 py-2.5 text-ink shadow-[inset_0_1px_2px_rgba(11,16,32,0.08)] transition-colors placeholder:text-ink-faint hover:border-line-bright focus:border-signal-ink";
 
 export const buttonClass =
-  "inline-flex items-center justify-center gap-2 rounded-md bg-signal px-4 py-2 text-sm font-semibold text-base transition-colors hover:bg-signal-dim hover:text-ink disabled:cursor-not-allowed disabled:opacity-50";
+  "btn-glow inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0";
 
 export const buttonGhostClass =
-  "inline-flex items-center justify-center gap-2 rounded-md border border-line-bright bg-surface-2 px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-signal/50 disabled:cursor-not-allowed disabled:opacity-50";
+  "glass-2 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-signal-ink/50 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50";
+
+export const buttonQuietClass =
+  "inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink";
+
+type Variant = "primary" | "ghost" | "quiet";
+
+const VARIANT_CLASS: Record<Variant, string> = {
+  primary: buttonClass,
+  ghost: buttonGhostClass,
+  quiet: buttonQuietClass,
+};
+
+export function Button({
+  variant = "primary",
+  className = "",
+  type = "button",
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
+  return <button type={type} className={`${VARIANT_CLASS[variant]} ${className}`} {...rest} />;
+}
+
+export function LinkButton({
+  variant = "primary",
+  className = "",
+  ...rest
+}: ComponentProps<typeof Link> & { variant?: Variant }) {
+  return <Link className={`${VARIANT_CLASS[variant]} ${className}`} {...rest} />;
+}
 
 export function Alert({
   tone = "critical",
@@ -132,42 +187,19 @@ export function Alert({
     tone === "critical"
       ? "border-sev-critical/40 bg-sev-critical/10 text-sev-critical"
       : tone === "signal"
-        ? "border-signal/40 bg-signal/10 text-signal"
+        ? "border-signal/40 bg-signal/10 text-signal-ink"
         : "border-line-bright bg-surface-2 text-ink-muted";
 
   return (
-    <div role="alert" className={`rounded-md border px-3 py-2 text-sm ${cls}`}>
+    <div
+      role={tone === "critical" ? "alert" : "status"}
+      className={`rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed ${cls}`}
+    >
       {children}
     </div>
   );
 }
 
-/* ---------------------------------------------------------------------------
- * Busy indicators.
- *
- * Buttons in this app are exported as class strings, not components, which
- * means there is no single place to add a loading state to. Rather than
- * refactor thirteen call sites into a <Button> component to gain a spinner,
- * these wrap the *label* instead — the part that already changes.
- *
- *     {busy ? "Scanning…" : "Run scan"}
- *     {busy ? <Busy>Scanning…</Busy> : "Run scan"}
- *
- * The `inline-flex items-center gap-2` that buttonClass has carried unused
- * since it was written does the layout.
- * ------------------------------------------------------------------------ */
-
-/**
- * An indeterminate spinner.
- *
- * `aria-hidden` because it duplicates the label beside it; under
- * prefers-reduced-motion the `.spin` class hides it outright, since a
- * motionless spinner communicates nothing that the word "Scanning…" does
- * not already say.
- *
- * The arc is drawn with stroke-dasharray as an attribute rather than CSS —
- * style-src has no 'unsafe-inline', so a style attribute would be dropped.
- */
 export function Spinner({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg
@@ -188,7 +220,6 @@ export function Spinner({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-/** A button label with a spinner in front of it. */
 export function Busy({ children }: { children: ReactNode }) {
   return (
     <>
@@ -198,26 +229,13 @@ export function Busy({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * A progress bar for work of unknown duration.
- *
- * Indeterminate on purpose. The server reports no percentage and no stage,
- * so a bar that filled toward a deadline would be predicting, not
- * measuring — and this product's own landing page criticises exactly that
- * kind of invented progress. A sweeping segment says "working, duration
- * unknown", which is the truth.
- *
- * `aria-hidden`: whatever renders this is expected to own a role="status"
- * region with the real, measured elapsed time in it. That is what gets
- * announced; this is decoration for the eye only.
- */
 export function IndeterminateBar({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`sweep-track h-1 w-full rounded-full bg-line ${className}`}
+      className={`sweep-track h-1 w-full rounded-full bg-ink/10 ${className}`}
       aria-hidden="true"
     >
-      <div className="sweep h-full w-1/4 rounded-full bg-signal" />
+      <div className="sweep h-full w-1/4 rounded-full bg-signal-ink" />
     </div>
   );
 }

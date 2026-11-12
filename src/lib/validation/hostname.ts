@@ -1,32 +1,7 @@
-/**
- * Hostname canonicalization for the authorization allowlist.
- *
- * This module has one job and it is a security job: turn user input into a
- * single canonical hostname string, or refuse. Everything downstream —
- * ownership verification, the allowlist lookup, the argument handed to
- * testssl.sh — compares against this canonical form.
- *
- * Rejections are deliberate, not incidental:
- *   - No scheme, path, query, userinfo, or port. "example.com:22@evil.com"
- *     and "example.com/../other" must not sneak past a string comparison.
- *   - No IP literals. Ownership of an IP is not verifiable by the DNS-TXT
- *     or well-known-file challenge this app implements, and allowing them
- *     opens SSRF-flavoured scanning of internal ranges.
- *   - No localhost or *.localhost, and no trailing-dot ambiguity.
- *   - Unicode is IDNA-encoded to punycode, so visually-confusable domains
- *     cannot masquerade as an allowlisted one.
- *
- * Note this is NOT a shell-escaping function. The testssl.sh integration
- * passes the hostname as a separate argv entry to execFile (never through a
- * shell), and this validator is the second layer that ensures the value
- * could not be meaningful to a shell even if one were introduced later.
- */
-
 export type NormalizeResult =
   | { ok: true; hostname: string }
   | { ok: false; reason: string };
 
-/** RFC 1123 label: alphanumeric with internal hyphens, 1-63 chars. */
 const LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
@@ -45,14 +20,10 @@ export function normalizeHostname(input: string): NormalizeResult {
   if (value.length === 0) return { ok: false, reason: "Enter a hostname" };
   if (value.length > 253) return { ok: false, reason: "Hostname is too long" };
 
-  // Whitespace and control characters are never valid in a hostname and
-  // are a classic way to smuggle argument or header separators.
   if (/[\s\u0000-\u001f\u007f]/.test(value)) {
     return { ok: false, reason: "Hostname contains invalid characters" };
   }
 
-  // Accept a pasted URL, but only by parsing it properly and taking the
-  // host component — never by string-trimming a prefix.
   if (value.includes("://")) {
     try {
       const url = new URL(value);
@@ -78,13 +49,8 @@ export function normalizeHostname(input: string): NormalizeResult {
     return { ok: false, reason: "Specify the hostname without a port" };
   }
 
-  // A trailing dot is technically the fully-qualified form, but allowing
-  // both "example.com" and "example.com." would create two rows that look
-  // different and resolve identically.
   value = value.replace(/\.$/, "").toLowerCase();
 
-  // IDNA / punycode. URL's host parser performs this for us and also
-  // rejects mixed-script tricks that a hand-rolled regex would miss.
   let ascii: string;
   try {
     ascii = new URL(`https://${value}`).hostname;
@@ -93,7 +59,6 @@ export function normalizeHostname(input: string): NormalizeResult {
   }
 
   if (ascii !== value && !/^[a-z0-9.-]+$/.test(value)) {
-    // Unicode input was converted; keep the ASCII form.
     value = ascii;
   } else {
     value = ascii;
@@ -134,10 +99,6 @@ export function normalizeHostname(input: string): NormalizeResult {
   return { ok: true, hostname: value };
 }
 
-/**
- * Strict equality against the canonical form. Used by the allowlist so that
- * comparison never happens on raw user input.
- */
 export function hostnameMatches(candidate: string, allowlisted: string): boolean {
   const a = normalizeHostname(candidate);
   const b = normalizeHostname(allowlisted);

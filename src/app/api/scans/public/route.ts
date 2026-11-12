@@ -11,28 +11,8 @@ import type { Prisma } from "@/generated/prisma/client";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// No testssl.sh here, so this finishes in seconds rather than minutes.
 export const maxDuration = 60;
 
-/**
- * A headers-only check of a host the caller does not own.
- *
- * Why this exists alongside POST /api/scans rather than as a flag on it:
- * they are different actions behind different gates, and collapsing them
- * into one endpoint with a boolean would mean one code path deciding, from
- * a request field, how much of the scanner to unlock. Keeping them apart
- * means `includeTls: false` is not a privilege check — it is simply the
- * only thing this route can ask for, and no request body can change that.
- *
- * What the target experiences is one HTTPS GET whose body is never read.
- * The fingerprint and CVE steps work from that same response and generate
- * no further traffic. That is why this does not require proof of
- * ownership: it is indistinguishable from a browser visiting the page once.
- *
- * What it must never become is a way to point testssl.sh at a stranger.
- * `includeTls: false` below is the whole of that guarantee, and it is
- * hard-coded.
- */
 export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
 
@@ -63,10 +43,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // A recent result is returned instead of fetching again. Ten people
-  // checking the same site inside the cache window cost that site one
-  // request, not ten — the strongest throttle available is the one that
-  // removes the request entirely.
   if (authorization.cached) {
     return apiOk({ scanId: authorization.cached.scanId, cached: true }, 200);
   }
@@ -97,8 +73,6 @@ export async function POST(request: NextRequest) {
   const result = await runScan({
     hostname: authorization.hostname,
     budgetLimit: budget,
-    // Hard-coded, never read from the request. This is the line that keeps
-    // an unowned target from being probed rather than observed.
     includeTls: false,
   });
 

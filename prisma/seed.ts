@@ -3,25 +3,9 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { hash, type Algorithm } from "@node-rs/argon2";
 
-// Run directly by tsx, so nothing has loaded the env files yet. Same order
-// as Next.js and prisma.config.ts: .env.local wins over .env.
 for (const file of [".env.local", ".env"]) {
   if (existsSync(file)) process.loadEnvFile(file);
 }
-
-/**
- * Development seed.
- *
- * Creates one administrator. Intentionally awkward to misuse in production:
- *
- *   - it refuses to run when NODE_ENV is "production"
- *   - it takes the password from SEED_ADMIN_PASSWORD and will not invent a
- *     default one, so there is no well-known credential to forget about
- *   - the account lands in PENDING_2FA, exactly like a real registration,
- *     so the first sign-in must complete TOTP enrollment
- *
- * Run with: npm run db:seed
- */
 
 const ARGON2ID = 2 as Algorithm;
 

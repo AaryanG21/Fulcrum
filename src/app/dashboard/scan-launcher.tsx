@@ -4,48 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/client/api";
 import { Alert, Busy, Field, Panel, buttonClass, inputClass } from "@/components/ui";
-import { ScanProgress } from "@/components/scan-progress";
 
 interface ScannableDomain {
   id: string;
   hostname: string;
-  /**
-   * Verified, but longer ago than the configured TTL. Listed rather than
-   * removed — a domain silently vanishing from the picker is harder to
-   * understand than one that says why it cannot be scanned.
-   */
   stale: boolean;
 }
 
-/**
- * Starts a scan.
- *
- * Only verified domains appear in the picker — but that is a convenience,
- * not the control. The server re-checks authorization on every request via
- * `authorizeScan`, so submitting an arbitrary domainId still gets refused
- * and logged.
- */
 export function ScanLauncher({ domains }: { domains: ScannableDomain[] }) {
   const router = useRouter();
   const [budget, setBudget] = useState(15);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // When the current run began, for the elapsed counter. Null when idle.
-  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
 
-  // The selection is DERIVED, not stored, and that is load-bearing.
-  //
-  // `useState(domains[0]?.id)` would capture the list as it was on first
-  // mount. This panel first renders with zero verified domains, so the
-  // stored id would be "" — and it would stay "" after a domain was
-  // verified and the props updated, because a useState initializer runs
-  // once. A controlled <select> whose value matches no option still
-  // displays the first one, so the form looked correct while posting an
-  // empty domainId.
-  //
-  // Holding only an explicit user choice, and falling back to the first
-  // available domain, means the rendered value and the submitted value
-  // cannot drift apart.
   const [chosenId, setChosenId] = useState<string | null>(null);
   const domainId =
     chosenId && domains.some((d) => d.id === chosenId)
@@ -56,7 +27,6 @@ export function ScanLauncher({ domains }: { domains: ScannableDomain[] }) {
     event.preventDefault();
     setBusy(true);
     setError(null);
-    setStartedAtMs(Date.now());
 
     const result = await apiFetch<{ scanId: string }>("/api/scans", {
       method: "POST",
@@ -64,12 +34,8 @@ export function ScanLauncher({ domains }: { domains: ScannableDomain[] }) {
     });
 
     setBusy(false);
-    setStartedAtMs(null);
 
     if (!result.ok) {
-      // Surface the specific field error when the server sent one; the
-      // generic message alone ("Check the scan parameters.") gives the user
-      // nothing to act on.
       const fieldError = result.error.details
         ? Object.entries(result.error.details)
             .map(([field, messages]) => `${field}: ${messages.join(", ")}`)
@@ -99,7 +65,7 @@ export function ScanLauncher({ domains }: { domains: ScannableDomain[] }) {
       title="Run a scan"
       description="Checks HTTP headers, TLS configuration via testssl.sh, and known CVEs for any disclosed versions."
     >
-      <form onSubmit={launch} aria-busy={busy} className="flex flex-wrap items-end gap-3">
+      <form method="post" onSubmit={launch} aria-busy={busy} className="flex flex-wrap items-end gap-3">
         <div className="min-w-56 flex-1">
           <Field label="Verified domain">
             <select
@@ -136,7 +102,7 @@ export function ScanLauncher({ domains }: { domains: ScannableDomain[] }) {
         </div>
 
         <button type="submit" className={buttonClass} disabled={busy}>
-          {busy ? <Busy>Scanning…</Busy> : "Run scan"}
+          {busy ? <Busy>Queueing…</Busy> : "Run scan"}
         </button>
       </form>
 
@@ -146,8 +112,6 @@ export function ScanLauncher({ domains }: { domains: ScannableDomain[] }) {
           Re-run its challenge above; the scan will be refused until you do.
         </p>
       )}
-
-      {busy && startedAtMs !== null && <ScanProgress startedAtMs={startedAtMs} />}
 
       {error && (
         <div className="mt-3">

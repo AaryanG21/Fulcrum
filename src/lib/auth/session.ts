@@ -14,15 +14,6 @@ import { signAccessToken, verifyAccessToken } from "@/lib/auth/tokens";
 import { writeAudit } from "@/lib/audit";
 import type { Role, UserStatus } from "@/generated/prisma/enums";
 
-/**
- * Session lifecycle: issue, read, rotate, revoke.
- *
- * Shape: a short-lived signed access token (stateless, ~10 min) paired with
- * a long-lived opaque refresh token (stateful, rotated on every use). The
- * refresh token is stored only as a SHA-256 hash, so a database read does
- * not yield usable credentials.
- */
-
 export interface SessionUser {
   id: string;
   email: string;
@@ -36,10 +27,6 @@ interface RequestContext {
   userAgent?: string | null;
 }
 
-/**
- * Starts a new session. Only ever called AFTER both factors have been
- * verified — there is no code path from password-only to a full session.
- */
 export async function createSession(
   userId: string,
   role: Role,
@@ -73,10 +60,6 @@ async function issueTokenPair(args: {
   const refreshToken = randomToken(32);
   const expiresAt = new Date(Date.now() + env.REFRESH_TOKEN_TTL_SECONDS * 1000);
 
-  // One transaction, because a half-finished rotation is a security
-  // problem and not merely an inconsistency: if the new row were created
-  // and the old row's replacedById never written, a replay of the old
-  // token would not be recognised as reuse and the family would survive.
   await prisma.$transaction(async (tx) => {
     const created = await tx.refreshToken.create({
       data: {
@@ -110,8 +93,6 @@ async function issueTokenPair(args: {
     maxAgeSeconds: env.ACCESS_TOKEN_TTL_SECONDS,
   });
 
-  // Scoped to /api/auth so the refresh token is not attached to every
-  // request that only needs the access token.
   await setAuthCookie({
     name: REFRESH_COOKIE,
     value: refreshToken,
@@ -120,13 +101,6 @@ async function issueTokenPair(args: {
   });
 }
 
-/**
- * Resolves the current session from the access-token cookie.
- *
- * The user row is re-read on every call rather than trusted from the token:
- * a suspended account or a role that was just demoted must stop working
- * immediately, not when the access token happens to expire.
- */
 export async function getSession(): Promise<SessionUser | null> {
   const token = await readCookie(ACCESS_COOKIE);
   if (!token) return null;
@@ -142,8 +116,6 @@ export async function getSession(): Promise<SessionUser | null> {
   if (!user) return null;
   if (user.status !== "ACTIVE") return null;
 
-  // The token's session family must still be live. This is what makes
-  // "revoke all sessions" take effect before the access token expires.
   const familyAlive = await prisma.refreshToken.count({
     where: {
       familyId: claims.sid,
@@ -161,14 +133,6 @@ export type RefreshOutcome =
   | { ok: true }
   | { ok: false; reason: "missing" | "invalid" | "expired" | "revoked" | "reuse" | "inactive" };
 
-/**
- * Rotates the refresh token.
- *
- * Reuse detection: presenting a token that has already been rotated means
- * either the old token leaked or the whole family did. We cannot tell which,
- * so the entire family is revoked and the user must log in again. This is
- * the standard OAuth 2.1 refresh-rotation guidance.
- */
 export async function rotateSession(
   ctx: RequestContext = {},
 ): Promise<RefreshOutcome> {
@@ -189,9 +153,6 @@ export async function rotateSession(
     return { ok: false, reason: "reuse" };
   }
 
-  // A token already spent by a rotation is reuse, even when replacedById
-  // was never linked. Only a deliberate end-of-session (logout, password
-  // change, suspension) is an ordinary "revoked".
   if (record.revokedAt) {
     if (record.revokedReason === "ROTATED") {
       await handleReuse(record.userId, record.familyId, ctx);
@@ -203,16 +164,6 @@ export async function rotateSession(
   if (record.expiresAt <= new Date()) return { ok: false, reason: "expired" };
   if (record.user.status !== "ACTIVE") return { ok: false, reason: "inactive" };
 
-  // Claim the token with a single predicated UPDATE, and treat losing the
-  // race as theft.
-  //
-  // Everything above this line is a read, so two requests presenting the
-  // same refresh token at the same moment both passed all of those checks
-  // before either wrote anything. The previous unconditional update let
-  // both proceed: two live families from one token, and the reuse
-  // detection — the whole point of rotation — never fired. Making the
-  // revoke conditional on the row still being unspent moves the decision
-  // into the database, where exactly one of the two can win.
   const claimed = await prisma.refreshToken.updateMany({
     where: { id: record.id, revokedAt: null, replacedById: null },
     data: { revokedAt: new Date(), revokedReason: "ROTATED" },
@@ -234,14 +185,6 @@ export async function rotateSession(
   return { ok: true };
 }
 
-/**
- * The response to a refresh token being presented twice.
- *
- * Deliberately indiscriminate: we cannot tell the legitimate holder from
- * the thief, because both hold a valid-looking token. Revoking the whole
- * family logs out both and forces a fresh login with both factors, which
- * the attacker cannot complete.
- */
 async function handleReuse(
   userId: string,
   familyId: string,
@@ -269,7 +212,6 @@ export async function revokeFamily(
   });
 }
 
-/** Revokes every session for a user (password change, suspension, admin). */
 export async function revokeAllSessions(
   userId: string,
   reason: string,

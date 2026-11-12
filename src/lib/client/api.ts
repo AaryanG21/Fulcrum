@@ -1,18 +1,5 @@
 "use client";
 
-/**
- * Browser-side API client.
- *
- * Two things it guarantees for every state-changing call:
- *   - credentials are sent as cookies (never a token read from JS storage;
- *     the session cookies are httpOnly and unreadable here by design)
- *   - the CSRF token is fetched once and echoed in the X-CSRF-Token header
- *
- * Nothing in this file is a security control by itself. The server re-checks
- * CSRF, the session, and the role on every request — this just makes the
- * legitimate client's requests well-formed.
- */
-
 export interface ApiFailure {
   code: string;
   message: string;
@@ -59,9 +46,6 @@ export async function apiFetch<T>(
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
   });
 
-  // A stale CSRF token (cookie rotated, tab left open overnight) is a
-  // recoverable condition, so retry once with a fresh one before surfacing
-  // an error the user cannot act on.
   if (response.status === 403 && method !== "GET") {
     const cloned = response.clone();
     const maybe = (await cloned.json().catch(() => null)) as

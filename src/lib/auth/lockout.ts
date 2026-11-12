@@ -3,20 +3,6 @@ import { prisma } from "@/lib/db";
 import { getEnv } from "@/lib/env";
 import { writeAudit } from "@/lib/audit";
 
-/**
- * Account lockout.
- *
- * Distinct from rate limiting, and both are needed: the rate limiter is
- * per-IP and in-memory (an attacker rotating IPs walks around it), while
- * lockout is per-account and persisted in Postgres, so distributed guessing
- * against one account still stalls.
- *
- * Trade-off worth naming: per-account lockout is itself a denial-of-service
- * vector — anyone who knows an email can lock it. That is why the lock is
- * time-boxed with exponential growth rather than permanent, and why an
- * admin can clear it.
- */
-
 export interface LockState {
   locked: boolean;
   until: Date | null;
@@ -36,11 +22,6 @@ export function lockState(user: {
   };
 }
 
-/**
- * Records a failed authentication step and locks the account once the
- * threshold is crossed. Lock duration doubles for each additional failure
- * past the threshold, capped at 24h.
- */
 export async function recordFailure(
   userId: string,
   reason: string,
@@ -87,7 +68,6 @@ export async function recordFailure(
   return { locked: true, until, retryAfterSeconds: seconds };
 }
 
-/** Clears the counter after a fully successful login (both factors). */
 export async function clearFailures(userId: string): Promise<void> {
   await prisma.user.update({
     where: { id: userId },
@@ -95,7 +75,6 @@ export async function clearFailures(userId: string): Promise<void> {
   });
 }
 
-/** Admin-initiated unlock. The caller is responsible for the audit entry. */
 export async function adminUnlock(userId: string): Promise<void> {
   await clearFailures(userId);
 }

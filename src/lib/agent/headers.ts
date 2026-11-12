@@ -5,22 +5,6 @@ import { sanitizeScannedText } from "@/lib/agent/sanitize";
 import { finalizeFinding } from "@/lib/agent/scoring";
 import type { Finding, Severity } from "@/lib/agent/types";
 
-/**
- * HTTP security-header and cookie-flag checks.
- *
- * Makes one request to the target and evaluates the response headers. Same
- * discipline as everywhere else in the agent: the conclusion ("HSTS is
- * missing") drives severity, and the header's actual text is retained only
- * as evidence.
- *
- * Request hardening — this is an outbound request to a host a user named,
- * so it gets the same treatment as the domain-verification fetch:
- *   - hostname re-canonicalized here, not trusted from the caller
- *   - redirects not followed (a redirect into link-local address space is
- *     the standard SSRF pivot to cloud instance metadata)
- *   - hard timeout, and the body is never read — only headers are needed
- */
-
 const FETCH_TIMEOUT_MS = 15_000;
 
 export interface HeaderProbe {
@@ -28,7 +12,6 @@ export interface HeaderProbe {
   status?: number;
   headers?: Headers;
   reason?: string;
-  /** Set when the target answered with a redirect we declined to follow. */
   redirected?: boolean;
 }
 
@@ -36,10 +19,6 @@ export async function probeHeaders(hostname: string): Promise<HeaderProbe> {
   const normalized = normalizeHostname(hostname);
   if (!normalized.ok) return { ok: false, reason: normalized.reason };
 
-  // safeHttpsGet resolves the name, refuses non-public answers and pins the
-  // connection to the address it vetted. Omitting maxBytes means the body
-  // is never read: only headers are needed, and not reading it means a
-  // target cannot feed us megabytes of content.
   const result = await safeHttpsGet({
     hostname: normalized.hostname,
     path: "/",
@@ -80,11 +59,6 @@ interface HeaderRule {
   exploitability: number;
   exposure: number;
   effort: number;
-  /**
-   * Extra validation when the header IS present. Returning a string means
-   * "present but inadequate", and that string is OUR description of the
-   * problem — never the header's own text.
-   */
   validate?: (value: string) => { problem: string; severity: Severity } | null;
 }
 
@@ -197,7 +171,6 @@ const HEADER_RULES: HeaderRule[] = [
   },
 ];
 
-/** Headers that disclose software detail without any benefit. */
 const DISCLOSURE_HEADERS = ["server", "x-powered-by", "x-aspnet-version", "x-generator"];
 
 export function evaluateHeaders(probe: HeaderProbe): Finding[] {
@@ -212,7 +185,6 @@ export function evaluateHeaders(probe: HeaderProbe): Finding[] {
   for (const rule of HEADER_RULES) {
     const raw = headers.get(rule.header);
 
-    // Clickjacking is covered by either mechanism; do not report it twice.
     if (rule.checkId === "header:x_frame_options" && cspHasFrameAncestors && !raw) {
       continue;
     }
@@ -271,8 +243,6 @@ function evaluateDisclosure(headers: Headers): Finding[] {
     if (!value) continue;
 
     const evidence = sanitizeScannedText(value);
-    // A bare product name is mild; a version number is what actually helps
-    // an attacker select an exploit.
     if (/\d+\.\d+/.test(evidence.text)) {
       disclosed.push(`${name}: ${evidence.text}`);
     }
@@ -309,9 +279,6 @@ function evaluateCookies(headers: Headers): Finding[] {
 
   for (const cookie of setCookies) {
     const clean = sanitizeScannedText(cookie).text;
-    // Only the cookie's NAME is reported, never its value — a session
-    // cookie's value is exactly the thing that must not end up in a stored
-    // scan result.
     const name = clean.split("=")[0]?.trim().slice(0, 64) ?? "unnamed";
     const attrs = clean.toLowerCase();
 
@@ -338,7 +305,6 @@ function evaluateCookies(headers: Headers): Finding[] {
       exploitability: 0.5,
       exposure: 0.7,
       effort: 3,
-      // Names only. Values are deliberately never captured.
       evidence: problems.slice(0, 10).join("; "),
     }),
   ];

@@ -9,21 +9,11 @@ import { writeAudit } from "@/lib/audit";
 import { signMfaPendingToken } from "@/lib/auth/tokens";
 import { MFA_COOKIE, setAuthCookie } from "@/lib/auth/cookies";
 import { getEnv } from "@/lib/env";
+import { sendVerificationEmail } from "@/lib/auth/account-mail";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Account registration.
- *
- * The new account lands in PENDING_2FA and receives an mfa-pending cookie,
- * not a session: 2FA enrollment is mandatory, so there is no state in which
- * a password alone yields a usable account.
- *
- * The response is identical whether or not the email was already
- * registered. Otherwise this endpoint becomes an account-enumeration
- * oracle, which is the standard finding against naive signup forms.
- */
 export async function POST(request: NextRequest) { const meta = getRequestMeta(request);
 
   const blocked = await enforceCsrf(request);
@@ -59,18 +49,11 @@ export async function POST(request: NextRequest) { const meta = getRequestMeta(r
       metadata: { outcome: "duplicate_email_suppressed" },
     });
 
-    // Deliberately the same shape and status as the success path. The
-    // hashing cost below is skipped, which is a small timing difference;
-    // a production hardening step would equalize it with a decoy hash.
     return apiOk({ status: "enrollment_required" }, 201);
   }
 
   const passwordHash = await hashPassword(password);
 
-  // One timestamp for one affirmative action, written to both columns.
-  // The checkbox is validated by the schema above as z.literal(true), so
-  // reaching here means it was ticked — the record is of something that
-  // actually happened, not of a default.
   const consentedAt = new Date();
 
   const user = await prisma.user.create({
@@ -99,6 +82,8 @@ export async function POST(request: NextRequest) { const meta = getRequestMeta(r
       termsAcceptedAt: consentedAt.toISOString(),
     },
   });
+
+  await sendVerificationEmail({ id: user.id, email }, meta);
 
   const pendingToken = await signMfaPendingToken(user.id);
   await setAuthCookie({

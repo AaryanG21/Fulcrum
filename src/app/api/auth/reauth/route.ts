@@ -16,14 +16,6 @@ import { recordAttempt } from "@/lib/auth/attempts";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Step-up authentication.
- *
- * Grants a short-lived reauth cookie proving the person at the keyboard
- * just supplied both factors. Destructive admin actions require it (see
- * requireAdminWithReauth), so a session left open on an unlocked laptop is
- * not by itself enough to suspend users or revoke domain verifications.
- */
 export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
   const env = getEnv();

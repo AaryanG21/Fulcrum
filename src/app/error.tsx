@@ -1,16 +1,5 @@
 "use client";
 
-/**
- * Route-level error boundary.
- *
- * What it deliberately does NOT render: `error.message` or `error.stack`.
- * In a production build Next replaces the message with a generic string and
- * exposes only `digest`, but in development the real message is present —
- * and a boundary that prints it is a boundary that will one day print a
- * connection string from a Prisma error. The digest is shown instead,
- * because it correlates with the server-side log entry without disclosing
- * anything about the failure to the person triggering it.
- */
 export default function Error({
   error,
   reset,
@@ -19,7 +8,7 @@ export default function Error({
   reset: () => void;
 }) {
   return (
-    <main className="flex min-h-screen items-center justify-center px-6">
+    <main id="main-content" tabIndex={-1} className="flex min-h-screen focus:outline-none items-center justify-center px-6">
       <div className="max-w-md text-center">
         <p className="font-mono text-sm tracking-widest text-sev-high uppercase">
           Error

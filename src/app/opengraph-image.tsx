@@ -1,43 +1,16 @@
 import { ImageResponse } from "next/og";
 
-/**
- * The card that appears when a link to Fulcrum is pasted into Slack,
- * iMessage, Discord or anywhere else that unfurls links. Without it they
- * render a blank rectangle.
- *
- * Note what this is NOT for: the root layout sets `robots: { index: false }`
- * site-wide, so this is not an SEO asset. It earns its place purely on
- * shared links.
- *
- * Two things worth knowing about the implementation:
- *
- *   - It must not be `force-dynamic`. Every page in this app opts out of
- *     static generation because a CSP nonce cannot reach prerendered HTML.
- *     That reasoning does not apply here: this route returns a PNG, carries
- *     no scripts and needs no nonce, so it can be generated once at build.
- *
- *   - The styles below are inline, and that is fine. They are consumed by
- *     Satori on the server to rasterise a PNG; no style attribute is ever
- *     sent to a browser, so the style-src CSP never sees them. This is the
- *     one place in the codebase where inline styles are correct.
- *
- * The font is the Geist regular bundled inside next/og, so rendering needs
- * no network access — which matters, because the Docker build has none.
- */
-
 export const alt =
   "Fulcrum — a security scorecard and remediation agent for websites";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Kept in step with the @theme tokens in src/app/globals.css by hand; Satori
-// cannot read CSS custom properties.
-const BASE = "#07090d";
-const SURFACE = "#0d1117";
-const LINE = "#1f2a37";
-const INK = "#e6edf3";
-const INK_MUTED = "#9aa7b4";
-const SIGNAL = "#3d9fd6";
+const BASE = "#010511";
+const SURFACE = "#050d24";
+const LINE = "#1a2c5c";
+const INK = "#f2f6ff";
+const INK_MUTED = "#b3c0e0";
+const SIGNAL = "#6fa0ff";
 
 export default function OpengraphImage() {
   return new ImageResponse(
@@ -51,14 +24,11 @@ export default function OpengraphImage() {
           justifyContent: "space-between",
           background: BASE,
           padding: 72,
-          // The console grid from the landing page, at card scale.
           backgroundImage: `linear-gradient(to right, ${LINE} 1px, transparent 1px), linear-gradient(to bottom, ${LINE} 1px, transparent 1px)`,
           backgroundSize: "60px 60px",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          {/* The same diamond as the header mark and the favicon: a square
-              turned 45 degrees, outlined, never filled. */}
           <div
             style={{
               width: 34,

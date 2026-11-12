@@ -1,13 +1,5 @@
 "use client";
 
-/**
- * Last-resort boundary, used when the root layout itself throws.
- *
- * It has to render its own <html> and <body> because the layout that would
- * normally provide them is the thing that failed. Styling is inline for the
- * same reason: at this point the stylesheet may not have loaded either.
- * As in error.tsx, the error message is never shown — only the digest.
- */
 export default function GlobalError({
   error,
 }: {
@@ -22,8 +14,8 @@ export default function GlobalError({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#07090d",
-          color: "#e6edf3",
+          background: "#010511",
+          color: "#f2f6ff",
           fontFamily: "ui-sans-serif, system-ui, sans-serif",
           padding: "1.5rem",
         }}
@@ -37,7 +29,7 @@ export default function GlobalError({
               marginTop: "0.5rem",
               fontSize: "0.875rem",
               lineHeight: 1.6,
-              color: "#9aa7b4",
+              color: "#b3c0e0",
             }}
           >
             The application shell failed to render. This is logged on the
@@ -49,7 +41,7 @@ export default function GlobalError({
                 marginTop: "1rem",
                 fontFamily: "ui-monospace, monospace",
                 fontSize: "0.75rem",
-                color: "#6b7986",
+                color: "#8fa0c8",
               }}
             >
               reference {error.digest}
@@ -66,9 +58,9 @@ export default function GlobalError({
               display: "inline-block",
               marginTop: "1.5rem",
               padding: "0.5rem 1rem",
-              border: "1px solid #2c3a4b",
+              border: "1px solid #5d73a8",
               borderRadius: "0.375rem",
-              color: "#e6edf3",
+              color: "#f2f6ff",
               fontSize: "0.875rem",
               textDecoration: "none",
             }}

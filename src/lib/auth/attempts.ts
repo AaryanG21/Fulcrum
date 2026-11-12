@@ -2,14 +2,6 @@ import "server-only";
 import { errorMessage, log } from "@/lib/log";
 import { prisma } from "@/lib/db";
 
-/**
- * Login-attempt journal.
- *
- * Separate from the audit log on purpose: this table is user-visible ("your
- * recent sign-in activity") and is queried on hot auth paths, whereas the
- * audit log is admin-facing and append-only. Neither stores credentials.
- */
-
 export type AuthStage = "PASSWORD" | "TOTP" | "BACKUP_CODE" | "REFRESH" | "REAUTH";
 
 export async function recordAttempt(args: {

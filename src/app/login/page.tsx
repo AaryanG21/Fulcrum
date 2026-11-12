@@ -1,50 +1,37 @@
 import Link from "next/link";
-import { SiteFooter } from "@/components/site-footer";
+import { AuthShell } from "@/components/auth-shell";
 import { LoginFlow } from "@/app/login/login-flow";
-import { Logo } from "@/components/logo";
+import { safeNextPath } from "@/lib/safe-redirect";
 
-export const metadata = { title: "Sign in — Fulcrum" };
+export const metadata = {
+  title: "Sign in",
+  description: "Sign in to Fulcrum with your password and your authenticator app.",
+  robots: { index: true, follow: true },
+  alternates: { canonical: "/login" },
+};
 
-// Rendered per request, not prerendered.
-//
-// The CSP in src/proxy.ts carries a per-request nonce, and `'strict-dynamic'`
-// makes browsers ignore the `'self'` source expression for scripts. A page
-// prerendered at build time has no request and therefore no nonce, so its
-// script tags are emitted bare and every one of them is blocked — the page
-// ships with no working JavaScript at all. That failure is invisible in
-// `next dev`, which does not prerender, and it only appears in a production
-// build. Opting out of static generation is what keeps the nonce and the
-// markup on the same request.
 export const dynamic = "force-dynamic";
 
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const { next } = await searchParams;
+  const safeNext = safeNextPath(typeof next === "string" ? next : null);
 
-export default function LoginPage() {
   return (
-    <div className="flex min-h-screen flex-col">
-      <header className="border-b border-line">
-        <div className="mx-auto flex max-w-6xl items-center px-6 py-4">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Logo />
-            <span className="font-mono text-sm font-semibold tracking-widest text-ink uppercase">
-              Fulcrum
-            </span>
+    <AuthShell
+      below={
+        <>
+          No account?{" "}
+          <Link href="/register" className="text-signal-ink hover:underline">
+            Create one
           </Link>
-        </div>
-      </header>
-
-      <main className="flex flex-1 items-center justify-center px-6 py-16">
-        <div className="w-full max-w-md">
-          <LoginFlow />
-          <p className="mt-6 text-center text-sm text-ink-muted">
-            No account?{" "}
-            <Link href="/register" className="text-signal hover:underline">
-              Create one
-            </Link>
-          </p>
-        </div>
-      </main>
-
-      <SiteFooter />
-    </div>
+        </>
+      }
+    >
+      <LoginFlow next={safeNext} />
+    </AuthShell>
   );
 }

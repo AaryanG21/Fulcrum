@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/client/api";
+import { ScheduleControl, type ScheduleState } from "@/app/dashboard/schedule-control";
 import { Alert, Badge, Busy, Field, Panel, buttonClass, buttonGhostClass, inputClass } from "@/components/ui";
 
 interface Challenge {
@@ -17,13 +18,10 @@ export interface DomainRow {
   verificationStatus: "PENDING" | "VERIFIED" | "FAILED" | "REVOKED";
   verificationMethod: "DNS_TXT" | "HTTP_WELL_KNOWN";
   verifiedAt: string | null;
-  /**
-   * Computed on the server from DOMAIN_VERIFICATION_TTL_DAYS. Shown here
-   * so the user is not surprised at scan time; `authorizeScan` decides.
-   */
   stale: boolean;
   createdAt: string;
   challenge: Challenge;
+  schedule: ScheduleState | null;
 }
 
 const STATUS_TONE = {
@@ -33,13 +31,6 @@ const STATUS_TONE = {
   REVOKED: "critical",
 } as const;
 
-/**
- * Domain allowlist management.
- *
- * The client renders state and submits intent; every decision — whether a
- * hostname is acceptable, whether a challenge passed, whether the caller
- * owns the row — is made on the server.
- */
 export function DomainManager({ initialDomains }: { initialDomains: DomainRow[] }) {
   const router = useRouter();
   const [hostname, setHostname] = useState("");
@@ -109,7 +100,7 @@ export function DomainManager({ initialDomains }: { initialDomains: DomainRow[] 
       title="Registered domains"
       description="Only verified domains can be scanned. Everything else is refused and logged."
     >
-      <form onSubmit={addDomain} className="flex flex-wrap items-end gap-3">
+      <form method="post" onSubmit={addDomain} className="flex flex-wrap items-end gap-3">
         <div className="min-w-56 flex-1">
           <Field label="Hostname" hint="Domain only — no scheme, path, or port.">
             <input
@@ -161,7 +152,7 @@ export function DomainManager({ initialDomains }: { initialDomains: DomainRow[] 
         {initialDomains.map((domain) => (
           <li
             key={domain.id}
-            className="rounded-md border border-line bg-surface-2 px-4 py-3"
+            className="glass-2 rounded-xl px-4 py-3"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -175,8 +166,6 @@ export function DomainManager({ initialDomains }: { initialDomains: DomainRow[] 
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Stale is the exception to hiding this on VERIFIED: it is
-                    the only route back to a scannable domain. */}
                 {((domain.verificationStatus !== "VERIFIED" &&
                   domain.verificationStatus !== "REVOKED") ||
                   (domain.verificationStatus === "VERIFIED" && domain.stale)) && (
@@ -200,8 +189,10 @@ export function DomainManager({ initialDomains }: { initialDomains: DomainRow[] 
               </div>
             </div>
 
-            {/* Shown for a stale domain too: a "Verify" button with no
-                visible token is a dead end if the record was removed. */}
+            {domain.verificationStatus === "VERIFIED" && !domain.stale && (
+              <ScheduleControl domainId={domain.id} schedule={domain.schedule} />
+            )}
+
             {(domain.verificationStatus !== "VERIFIED" || domain.stale) && (
               <dl className="mt-3 space-y-1.5 text-xs">
                 <div className="flex flex-wrap gap-2">

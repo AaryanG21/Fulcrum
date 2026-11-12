@@ -1,38 +1,15 @@
-# Fulcrum — multi-stage build.
-#
-# Notes that matter for security rather than size:
-#   - the runtime image runs as a non-root user
-#   - only the standalone build output, the Prisma migrations, and the
-#     pinned testssl.sh checkout are copied into it; no source, no dev deps
-#   - bash, openssl, and coreutils are installed because testssl.sh is a
-#     bash script that shells out to openssl. Alpine's default ash is not
-#     sufficient for it.
-#   - no secrets are baked in. Everything comes from the environment at
-#     runtime and is validated at boot.
-
-# ---------------------------------------------------------------------------
 FROM node:24-alpine AS deps
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# ---------------------------------------------------------------------------
 FROM node:24-alpine AS builder
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generates the Prisma client into src/generated, then builds Next.
-# A dummy DATABASE_URL is enough for codegen; it is never connected to.
-#
-# The two keys are placeholders, not secrets, and they are passed as a RUN
-# prefix rather than ENV so they never persist into a layer's environment.
-# Both decode to exactly 32 bytes, which is what src/lib/env.ts requires —
-# the previous values decoded to 34 despite being named "32bytes", so the
-# page-data collection step of `next build` rejected them and this image
-# had never successfully built. CI is what surfaced that.
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" \
     JWT_SIGNING_KEY="YnVpbGQtdGltZS1wbGFjZWhvbGRlci1ub3QtcmVhbCE=" \
@@ -40,11 +17,9 @@ RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" \
     APP_ORIGIN="http://localhost:3000" \
     npm run build
 
-# ---------------------------------------------------------------------------
 FROM node:24-alpine AS runner
 WORKDIR /app
 
-# testssl.sh dependencies.
 RUN apk add --no-cache bash openssl coreutils procps drill
 
 ENV NODE_ENV=production
@@ -60,21 +35,15 @@ COPY --from=builder --chown=fulcrum:fulcrum /app/.next/standalone ./
 COPY --from=builder --chown=fulcrum:fulcrum /app/.next/static ./.next/static
 COPY --from=builder --chown=fulcrum:fulcrum /app/public ./public
 
-# Migrations and the Prisma CLI, so the container can run `prisma migrate
-# deploy` on start-up if the deployment chooses to.
 COPY --from=builder --chown=fulcrum:fulcrum /app/prisma ./prisma
 COPY --from=builder --chown=fulcrum:fulcrum /app/prisma.config.ts ./prisma.config.ts
 
-# The pinned external tool.
 COPY --from=builder --chown=fulcrum:fulcrum /app/vendor/testssl.sh ./vendor/testssl.sh
 
 USER fulcrum
 
 EXPOSE 3000
 
-# /api/ready, not "/". The old check fetched the marketing page, which is
-# a static render that reads no environment and touches no database — so
-# it reported healthy with Postgres unreachable and migrations unapplied.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/api/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 

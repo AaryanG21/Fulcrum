@@ -8,13 +8,14 @@ import { AppShell } from "@/components/app-shell";
 import { Badge, Panel } from "@/components/ui";
 import { ChangePasswordForm } from "@/app/account/change-password-form";
 import { DataControls } from "@/app/account/data-controls";
+import { loginRedirectUrl } from "@/lib/safe-redirect";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Account — Fulcrum" };
+export const metadata = { title: "Account" };
 
 export default async function AccountPage() {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect(loginRedirectUrl("/account"));
 
   const [user, attempts, backupCodesLeft] = await Promise.all([
     prisma.user.findUnique({
@@ -37,7 +38,7 @@ export default async function AccountPage() {
   if (!user) redirect("/login");
 
   return (
-    <AppShell email={session.email} isAdmin={session.role === "ADMIN"} active="account">
+    <AppShell email={session.email} isAdmin={session.role === "ADMIN"} active="account" title="Account">
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel title="Account">
           <dl className="space-y-2.5 text-sm">
@@ -79,7 +80,7 @@ export default async function AccountPage() {
 
           <Link
             href="/enroll"
-            className="mt-4 inline-flex rounded-md border border-line-bright bg-surface-2 px-4 py-2 text-sm text-ink transition-colors hover:border-signal/50"
+            className="glass-2 mt-4 inline-flex rounded-xl px-4 py-2 text-sm text-ink transition-colors hover:border-signal/50"
           >
             Re-enroll authenticator
           </Link>

@@ -1,3 +1,4 @@
+import { emailProviderLabel } from "@/lib/email/provider-label";
 import Link from "next/link";
 import { JURISDICTION, OPERATOR } from "@/lib/legal/operator";
 
@@ -5,30 +6,12 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Privacy policy",
+  robots: { index: true, follow: true },
+  alternates: { canonical: "/privacy" },
   description:
     "What personal data Fulcrum collects, why, how long it is kept, and how to have it erased. Written against the Digital Personal Data Protection Act, 2023.",
 };
 
-/**
- * Privacy policy.
- *
- * Written from an audit of the schema and the code rather than from a
- * template, because the only part of a privacy policy that is worth
- * anything is the part a template cannot supply: what this particular
- * software actually does. Every factual claim below was checked against
- * prisma/schema.prisma, src/lib/auth/cookies.ts, src/lib/audit.ts and the
- * outbound-request paths in src/lib/net/safe-request.ts.
- *
- * Two statements here are unusual enough to be worth flagging to whoever
- * maintains this next, because both are easy to break:
- *
- *   - IP addresses are collected ONLY when TRUST_PROXY_HEADERS is enabled,
- *     which is off by default. If that changes, this document changes.
- *   - The audit log is append-only at the database level. Erasure works by
- *     dropping aged partitions, not by deleting rows. If the retention
- *     window in OPERATOR.auditRetentionDays changes, the sentence below
- *     changes with it, because it reads the same constant.
- */
 export default function PrivacyPolicy() {
   return (
     <>
@@ -95,8 +78,9 @@ export default function PrivacyPolicy() {
             <td>Email address</td>
             <td>
               Identifies your account, is how you sign in, and labels the entry
-              in your authenticator app. It is never used to send you email —
-              see <a href="#email">Email</a> below.
+              in your authenticator app. We also send a small number of
+              messages to it, described under <a href="#email">Email</a> below
+              — never marketing.
             </td>
           </tr>
           <tr>
@@ -127,6 +111,28 @@ export default function PrivacyPolicy() {
             <td>
               To check you control a domain before scanning it, and to list
               your domains back to you.
+            </td>
+          </tr>
+          <tr>
+            <td>Whether and when you confirmed your email address</td>
+            <td>
+              Nothing can sign in until the address has been confirmed, so we
+              know the person registering can read mail sent to it.
+            </td>
+          </tr>
+          <tr>
+            <td>Scan schedules you set</td>
+            <td>
+              Which domain, how often, and whether you want an email if the
+              result gets worse — so the scans run and you are told.
+            </td>
+          </tr>
+          <tr>
+            <td>Share links you create</td>
+            <td>
+              When each was made, when it expires and whether it was revoked.
+              The link itself is not stored — only a one-way hash of it — so
+              it cannot be recovered, only replaced.
             </td>
           </tr>
         </tbody>
@@ -184,6 +190,16 @@ export default function PrivacyPolicy() {
         </tbody>
       </table>
 
+      <h3>One-time links we email you</h3>
+
+      <p>
+        To confirm your address and to reset a password, we generate a random
+        single-use link and email it to you. We store only a one-way hash of
+        it and its expiry time, never the link, so reading our database does
+        not yield a working link. It is deleted shortly after it expires or is
+        used.
+      </p>
+
       <h3>IP addresses — only in some deployments</h3>
 
       <p>
@@ -200,6 +216,25 @@ export default function PrivacyPolicy() {
         letting you recognise activity that was not you. Separately, whatever
         reverse proxy or hosting provider sits in front of this service keeps
         its own access logs, which are outside this application.
+      </p>
+
+      <p>
+        Scans run in the background, after your request has finished, so the
+        audit record written when a scan completes or fails names your account
+        but carries no IP address or browser details. Those are recorded once,
+        on the entry made when you asked for the scan.
+      </p>
+
+      <h3>The check on the home page</h3>
+
+      <p>
+        You can check a site&rsquo;s headers from the home page without an
+        account. Nothing about that check is stored for you: there is no
+        result to look up later. The security audit log records that a check of
+        that hostname was requested and its grade, and your IP address where
+        this deployment collects one (see below), for the reasons given there —
+        chiefly so the feature cannot be used to send traffic at someone else
+        without anyone being able to tell who.
       </p>
 
       <h3>Data about the sites you scan</h3>
@@ -243,12 +278,17 @@ export default function PrivacyPolicy() {
       <h2>Who else receives your data</h2>
 
       <p>
-        <strong>No third-party service receives your personal data.</strong>{" "}
-        Fulcrum sends no data to any external API, analytics endpoint or
-        processor.
+        <strong>Your email address is handled by one service: the one that
+        delivers our email.</strong> That is {emailProviderLabel()}. It sees
+        the address and the content of each message we send you, and nothing
+        else about you. Fulcrum sends no data to any analytics endpoint, advertising
+        network or other processor.
       </p>
 
-      <p>The only outbound network activity is caused by you, and consists of:</p>
+      <p>
+        Apart from that, the only outbound network activity is caused by you,
+        and consists of:
+      </p>
 
       <ul>
         <li>
@@ -270,17 +310,48 @@ export default function PrivacyPolicy() {
       <h2 id="email">Email</h2>
 
       <p>
-        Fulcrum sends no email. There is no mail provider configured, no
-        marketing list, no notification email and no password-reset email. Your
-        address is stored, shown back to you, and used as the label in your
-        authenticator app. Because nothing is ever sent, there is nothing to
-        unsubscribe from.
+        Fulcrum sends email for exactly four reasons, and no others. There is
+        no marketing list, no newsletter and no tracking: the messages contain
+        no images, no tracking pixels and no wrapped links.
       </p>
 
+      <ul>
+        <li>
+          <strong>To confirm your address</strong> when you register.
+        </li>
+        <li>
+          <strong>To reset a password</strong>, when you ask us to.
+        </li>
+        <li>
+          <strong>To tell you your password was changed</strong>, so a change
+          you did not make does not go unnoticed.
+        </li>
+        <li>
+          <strong>Alerts you turned on yourself:</strong> if you schedule scans
+          of a domain and choose to be told when the result gets worse, we email
+          you when it does, and if a schedule is paused because ownership of the
+          domain is no longer verified. You can turn these off at any time from
+          your dashboard.
+        </li>
+      </ul>
+
       <p>
-        Account recovery is by backup code only. If you lose both your
-        authenticator and your backup codes, we cannot restore access, because
-        we hold nothing that would let us verify it is you.
+        Because none of these is marketing, they are sent whether or not you
+        have opted into anything else, and the first three cannot be switched
+        off. There is no unsubscribe link on them for that reason; the alerts
+        you chose have a switch in your dashboard instead.
+      </p>
+
+      <h3>If you lose access</h3>
+
+      <p>
+        Resetting a password by email also needs a code from your authenticator
+        app or one of your backup codes. This is deliberate: access to an inbox
+        alone must not be enough to take over an account on a security tool,
+        or two-factor authentication would protect nothing. The consequence is
+        that if you lose your authenticator <em>and</em> every backup code, we
+        cannot restore access — we hold nothing that would let us tell it is
+        really you. Keep your backup codes somewhere other than your phone.
       </p>
 
       <h2>How long we keep it</h2>
@@ -300,6 +371,17 @@ export default function PrivacyPolicy() {
           <tr>
             <td>Expired session records</td>
             <td>Removed automatically once expired.</td>
+          </tr>
+          <tr>
+            <td>One-time email links (as hashes)</td>
+            <td>Removed automatically a week after they expire or are used.</td>
+          </tr>
+          <tr>
+            <td>Share links and scan schedules</td>
+            <td>
+              Until you revoke or remove them or delete the account. Share links
+              also stop working at their expiry, 30 days after they are made.
+            </td>
           </tr>
           <tr>
             <td>Security audit records</td>
@@ -394,9 +476,11 @@ export default function PrivacyPolicy() {
       <h2>Cookies</h2>
 
       <p>
-        Fulcrum sets five cookies, all of them strictly necessary to sign you
-        in and keep the session safe. There are no analytics or advertising
-        cookies, which is why you are not asked to consent to any. The{" "}
+        Fulcrum sets five cookies that are strictly necessary to sign you in and
+        keep the session safe, and one more, <code>fulcrum_theme</code>, only
+        if you press the light/dark switch, to remember your choice. There are
+        no analytics or advertising cookies, which is why you are not asked to
+        consent to any. The{" "}
         <Link href="/cookies">cookie policy</Link> lists each one, what it does
         and how long it lasts.
       </p>

@@ -20,14 +20,6 @@ import { writeAudit } from "@/lib/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Step two of login: the second factor.
- *
- * This is the only route that can mint a full session from a login flow.
- * It requires a valid mfa_pending token, which only /api/auth/login issues
- * and only after a correct password — so neither factor alone is sufficient
- * at any point in the flow.
- */
 export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
 
@@ -72,6 +64,7 @@ export async function POST(request: NextRequest) {
       email: true,
       role: true,
       status: true,
+      emailVerifiedAt: true,
       lockedUntil: true,
       twoFactorEnabled: true,
       twoFactorSecret: true,
@@ -80,6 +73,19 @@ export async function POST(request: NextRequest) {
   });
 
   if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+    return apiError(401, "invalid_code", "Could not verify that code.");
+  }
+
+  if (!user.emailVerifiedAt) {
+    await writeAudit({
+      actorUserId: user.id,
+      action: "LOGIN_BLOCKED_UNVERIFIED_EMAIL",
+      targetType: "User",
+      targetId: user.id,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      metadata: { stage: "2fa" },
+    });
     return apiError(401, "invalid_code", "Could not verify that code.");
   }
 
@@ -110,7 +116,6 @@ export async function POST(request: NextRequest) {
     );
     verified = check.valid;
     if (check.valid) {
-      // Burn the time step so this code cannot be replayed.
       await commitTotpTimeStep(user.id, check.timeStep!);
     }
   }
@@ -169,7 +174,6 @@ export async function POST(request: NextRequest) {
   return apiOk({
     status: "authenticated",
     role: user.role,
-    // Surfaced so the UI can nudge a user who is running low.
     remainingBackupCodes,
   });
 }

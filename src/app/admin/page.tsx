@@ -4,21 +4,14 @@ import { getSession } from "@/lib/auth/session";
 import { AppShell } from "@/components/app-shell";
 import { Panel, Stat } from "@/components/ui";
 import { AdminConsole } from "@/app/admin/admin-console";
+import { loginRedirectUrl } from "@/lib/safe-redirect";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Admin — Fulcrum" };
+export const metadata = { title: "Admin" };
 
-/**
- * Admin console.
- *
- * The role check happens here, server-side, before any admin data is
- * fetched — a non-admin gets a redirect and never receives the payload.
- * The same check is repeated independently inside every /api/admin route,
- * because a page guard does not protect an API.
- */
 export default async function AdminPage() {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect(loginRedirectUrl("/admin"));
   if (session.role !== "ADMIN") redirect("/dashboard");
 
   const [users, domains, auditEntries, health] = await Promise.all([
@@ -76,7 +69,7 @@ export default async function AdminPage() {
   const [totalUsers, suspended, verifiedDomains, activeSessions] = health;
 
   return (
-    <AppShell email={session.email} isAdmin active="admin">
+    <AppShell email={session.email} isAdmin active="admin" title="Administration">
       <div className="grid gap-4 sm:grid-cols-4">
         <Stat label="Users" value={totalUsers} hint={`${suspended} suspended`} />
         <Stat label="Verified domains" value={verifiedDomains} />
@@ -107,14 +100,14 @@ export default async function AdminPage() {
           description="Append-only. The database rejects updates and deletes on this table."
         >
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="data-table w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-xs tracking-wide text-ink-faint uppercase">
-                  <th className="pb-2 font-medium">When</th>
-                  <th className="pb-2 font-medium">Actor</th>
-                  <th className="pb-2 font-medium">Action</th>
-                  <th className="pb-2 font-medium">Target</th>
-                  <th className="pb-2 font-medium">IP</th>
+                  <th scope="col" className="pb-2 font-medium">When</th>
+                  <th scope="col" className="pb-2 font-medium">Actor</th>
+                  <th scope="col" className="pb-2 font-medium">Action</th>
+                  <th scope="col" className="pb-2 font-medium">Target</th>
+                  <th scope="col" className="pb-2 font-medium">IP</th>
                 </tr>
               </thead>
               <tbody>

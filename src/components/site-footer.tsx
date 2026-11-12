@@ -1,25 +1,17 @@
 import Link from "next/link";
 import { OPERATOR } from "@/lib/legal/operator";
 
-/**
- * Shared footer.
- *
- * Exists so the legal pages are reachable from every public page — a
- * privacy policy nobody can find is not published in any meaningful sense,
- * and under the DPDP Act the operator and the grievance contact have to be
- * discoverable, not merely written down somewhere.
- *
- * The operator details come from lib/legal/operator.ts rather than being
- * typed here, so the footer and the documents cannot drift apart.
- */
 export function SiteFooter() {
   return (
-    <footer className="border-t border-line">
+    <footer className="border-t border-line/60 bg-base/40">
       <div className="mx-auto max-w-6xl px-6 py-8 text-xs text-ink-muted">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-sm">
-            <p className="font-mono text-ink-muted">
-              Fulcrum · defence in depth, honestly described
+            <p className="font-display text-sm font-semibold tracking-tight text-ink">
+              Fulcrum{" "}
+              <span className="font-sans text-xs font-normal text-ink-muted">
+                · defence in depth, honestly described
+              </span>
             </p>
             <p className="mt-2 leading-relaxed">
               Operated by {OPERATOR.name}, {OPERATOR.legalForm}.
@@ -28,7 +20,7 @@ export function SiteFooter() {
               Contact:{" "}
               <a
                 href={`mailto:${OPERATOR.contactEmail}`}
-                className="text-signal hover:underline"
+                className="text-signal-ink hover:underline"
               >
                 {OPERATOR.contactEmail}
               </a>
@@ -36,9 +28,7 @@ export function SiteFooter() {
           </div>
 
           <nav aria-label="Legal and policies">
-            <h2 className="font-mono text-[11px] tracking-widest text-ink-muted uppercase">
-              Policies
-            </h2>
+            <h2 className="eyebrow text-ink-muted">Policies</h2>
             <ul className="mt-2 space-y-1.5">
               <li>
                 <Link href="/privacy" className="hover:text-ink hover:underline">

@@ -8,38 +8,15 @@ import { checkRateLimit, type RateLimitName } from "@/lib/security/rate-limit";
 import { apiError, apiRateLimited, getRequestMeta } from "@/lib/http";
 import { writeAudit } from "@/lib/audit";
 
-/**
- * Server-side authorization guards.
- *
- * Every protected route calls one of these. The client also hides admin UI
- * from non-admins, but that is cosmetic: the role check that actually
- * matters happens here, on the server, against the database row — never
- * against a claim the client sent.
- */
-
 export type GuardResult<T> =
   | { ok: true; value: T }
   | { ok: false; response: NextResponse };
 
 export interface GuardOptions {
-  /** Applies a named rate-limit policy keyed on IP (+ user when known). */
   rateLimit?: RateLimitName;
-  /** Skip CSRF (only for endpoints that are safe by construction). */
   skipCsrf?: boolean;
 }
 
-/**
- * Rate-limit check that records its own refusals.
- *
- * Exported because the pre-session auth routes cannot go through
- * requireUser — there is no session yet — but they must still produce the
- * same audit trail. Before this existed they called checkRateLimit
- * directly, so RATE_LIMIT_TRIPPED was emitted only by the handful of
- * routes that used a guard, and the log under-reported attacks on exactly
- * the endpoints most worth attacking.
- *
- * Returns a response to send, or null to continue.
- */
 export async function enforceRateLimit(
   request: Request,
   policy: RateLimitName,
@@ -63,13 +40,6 @@ export async function enforceRateLimit(
   return apiRateLimited(result.retryAfterSeconds);
 }
 
-/**
- * CSRF check that records its own refusals.
- *
- * Same reasoning as enforceRateLimit: one implementation, so a rejected
- * request is logged identically wherever it was rejected. Returns a
- * response to send, or null to continue.
- */
 export async function enforceCsrf(
   request: Request,
   actorUserId?: string | null,
@@ -111,7 +81,6 @@ async function runCommonChecks(
   return null;
 }
 
-/** Requires an authenticated, ACTIVE user with a live session. */
 export async function requireUser(
   request: Request,
   options: GuardOptions = {},
@@ -131,7 +100,6 @@ export async function requireUser(
   return { ok: true, value: session };
 }
 
-/** Requires role ADMIN, re-read from the database on every request. */
 export async function requireAdmin(
   request: Request,
   options: GuardOptions = {},
@@ -151,8 +119,6 @@ export async function requireAdmin(
       metadata: { requiredRole: "ADMIN", actualRole: result.value.role },
     });
 
-    // 404-style opacity is tempting here, but a plain 403 is more honest
-    // and the route list is not itself a secret.
     return {
       ok: false,
       response: apiError(403, "forbidden", "Administrator access required."),
@@ -162,14 +128,6 @@ export async function requireAdmin(
   return result;
 }
 
-/**
- * Consumes a step-up re-authentication for an already-authenticated user.
- *
- * Shared by the admin guard and by irreversible actions on a user's own
- * account, because "confirm who you are before something you cannot undo"
- * is the same requirement in both cases — the only difference is whose
- * data is at stake.
- */
 async function consumeReauth(
   result: GuardResult<SessionUser>,
 ): Promise<GuardResult<SessionUser>> {
@@ -189,32 +147,11 @@ async function consumeReauth(
     };
   }
 
-  // Spend the step-up. One confirmation authorises one action.
-  //
-  // Previously the cookie survived for its full lifetime, so a single
-  // password+TOTP confirmation silently authorised every destructive admin
-  // action taken in the next five minutes. That is the opposite of what
-  // step-up authentication is for: the point is to tie an explicit
-  // confirmation to a specific consequential act, and a reusable token
-  // turns it back into an ambient privilege. The admin console already
-  // prompts before each action, so clearing it here costs nothing and
-  // closes the gap for any other caller.
-  //
-  // Note the limit of this: the token is a stateless JWT, so clearing the
-  // cookie is what prevents reuse. It is httpOnly and SameSite=strict, but
-  // an attacker who had already exfiltrated the value could still present
-  // it until it expires. Binding a one-time id in the database would close
-  // that too, at the cost of a write on every admin action.
   await clearAuthCookie(REAUTH_COOKIE);
 
   return result;
 }
 
-/**
- * Requires ADMIN *and* a re-authentication performed within
- * REAUTH_TTL_SECONDS. Used for destructive admin actions so that a
- * walked-away-from session cannot be used to suspend users.
- */
 export async function requireAdminWithReauth(
   request: Request,
   options: GuardOptions = {},
@@ -222,14 +159,6 @@ export async function requireAdminWithReauth(
   return consumeReauth(await requireAdmin(request, options));
 }
 
-/**
- * Requires a signed-in user *and* a fresh re-authentication.
- *
- * For irreversible actions on one's own account — deleting it, principally.
- * A session left open on an unlocked laptop should not be enough to destroy
- * an account, and unlike a password change there is nothing to undo
- * afterwards.
- */
 export async function requireUserWithReauth(
   request: Request,
   options: GuardOptions = {},

@@ -6,14 +6,6 @@ import { requireUser } from "@/lib/auth/guards";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * One scan result in full.
- *
- * Ownership is enforced in the query itself rather than by fetching and
- * then comparing — there is no window in which another user's row exists in
- * memory. A scan belonging to someone else returns the same 404 as one that
- * does not exist.
- */
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ scanId: string }> },

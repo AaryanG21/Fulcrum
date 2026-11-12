@@ -7,13 +7,6 @@ import { writeAudit } from "@/lib/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Removes one of the caller's own domains.
- *
- * Past scan results cascade away with the domain row. That is a deliberate
- * choice in favour of the user's control over their own data; the audit log
- * retains the fact that the domain existed and was removed.
- */
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ domainId: string }> },

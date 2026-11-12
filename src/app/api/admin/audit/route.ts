@@ -8,13 +8,6 @@ import { AUDIT_ACTIONS, isAuditAction, writeAudit } from "@/lib/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Reads the audit log, newest first, cursor-paginated.
- *
- * Reading the log is itself an audited event. Without that, an admin could
- * go looking through everyone's activity and leave no trace of having done
- * so — which defeats the purpose of keeping the log in the first place.
- */
 export async function GET(request: NextRequest) {
   const meta = getRequestMeta(request);
 
@@ -33,12 +26,6 @@ export async function GET(request: NextRequest) {
 
   const { cursor, limit } = parsed.data;
 
-  // Validate the filter instead of passing it straight to the query.
-  //
-  // It arrived as a free-form string, so a typo — or an action name that
-  // no longer exists — produced an empty page that read as "nothing
-  // happened" rather than "you asked for something that cannot happen".
-  // On an audit log, those two answers must never look alike.
   const requestedAction = url.searchParams.get("action");
   if (requestedAction !== null && !isAuditAction(requestedAction)) {
     return apiError(

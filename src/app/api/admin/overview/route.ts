@@ -6,15 +6,6 @@ import { requireAdmin } from "@/lib/auth/guards";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Admin dashboard data: users, domains, scans, and system health.
- *
- * Read-only, so it needs the admin role but not a fresh re-authentication —
- * that requirement is reserved for the destructive actions.
- *
- * Note what is NOT selected: passwordHash, twoFactorSecret, and token
- * hashes never leave the database, not even for an administrator.
- */
 export async function GET(request: NextRequest) {
   const guard = await requireAdmin(request, { skipCsrf: true, rateLimit: "api" });
   if (!guard.ok) return guard.response;

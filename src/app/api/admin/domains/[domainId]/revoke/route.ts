@@ -11,14 +11,6 @@ export const dynamic = "force-dynamic";
 
 const schema = z.object({ reason: z.string().trim().min(3).max(500) });
 
-/**
- * Revokes a domain's verification.
- *
- * The escape hatch for when a domain changes hands, or when a verification
- * turns out to have been obtained improperly. The row is marked REVOKED
- * rather than deleted, so the history stays visible and `authorizeScan`
- * refuses every subsequent scan against it.
- */
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ domainId: string }> },

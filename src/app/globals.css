@@ -1,85 +1,342 @@
 @import "tailwindcss";
 
-/*
- * Fulcrum design tokens.
- *
- * Dark-first, as security tooling conventionally is. A light theme is
- * defined too, but dark is the default rather than a `prefers-color-scheme`
- * afterthought.
- *
- * Fonts are a system stack on purpose: no external font fetch means the
- * strict CSP needs no third-party host, and the Docker build needs no
- * network access to render text correctly.
- */
-
 @theme {
+  --font-display:
+    var(--nf-display), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, Arial, sans-serif;
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
-    Arial, sans-serif;
+    var(--nf-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
-    monospace;
+    var(--nf-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
 
-  /* Surfaces: near-black base with progressively lifted panels. */
-  --color-base: #07090d;
-  --color-surface: #0d1117;
-  --color-surface-2: #131a23;
-  --color-surface-3: #1a232e;
-  --color-line: #1f2a37;
-  --color-line-bright: #2c3a4b;
+  --color-base: #f4f0e6;
+  --color-surface: #fbf9f3;
+  --color-surface-2: #efeadf;
+  --color-surface-3: #e6e0d2;
+  --color-line: #d9d2c1;
+  --color-line-bright: #8a8272;
 
-  /* Text */
-  --color-ink: #e6edf3;
-  --color-ink-muted: #9aa7b4;
-  --color-ink-faint: #6b7986;
+  --color-ink: #010102;
+  --color-ink-muted: #3f3c48;
+  --color-ink-faint: #5a5664;
 
-  /* Accent: marine blue, the colour of a passing check. */
-  --color-signal: #3d9fd6;
-  --color-signal-dim: #1a5f8a;
+  --color-signal: #7022fc;
+  --color-signal-ink: #7022fc;
+  --color-signal-dim: #5516c4;
+  --color-flare: #ef233c;
 
-  /* Severity ramp, used by grades and findings. */
-  --color-sev-critical: #ff3b4e;
-  --color-sev-high: #ff8a3d;
-  --color-sev-medium: #f2d675;
-  --color-sev-low: #9db8d4;
-  --color-sev-info: #8b98a5;
+  --color-accent: #fd8f32;
+  --color-accent-hover: #ffa04d;
+  --color-on-accent: #010102;
+
+  --color-sev-critical: #b3122a;
+  --color-sev-high: #a3470a;
+  --color-sev-medium: #7a5700;
+  --color-sev-low: #5b3fa8;
+  --color-sev-info: #5a5664;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
+
+  --theme-mesh:
+    radial-gradient(44% 40% at 86% 2%, rgba(112, 34, 252, 0.22), transparent 70%),
+    radial-gradient(34% 32% at 50% 8%, rgba(239, 35, 60, 0.07), transparent 70%),
+    radial-gradient(34% 34% at 6% 34%, rgba(112, 34, 252, 0.10), transparent 70%),
+    radial-gradient(40% 34% at 2% 98%, rgba(253, 143, 50, 0.30), transparent 70%),
+    radial-gradient(30% 28% at 94% 92%, rgba(239, 35, 60, 0.12), transparent 70%);
+  --theme-grain-opacity: var(--theme-grain-opacity);
+  --theme-grain-blend: multiply;
+  --theme-dot: rgba(1, 1, 2, 0.16);
+  --theme-glass:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.35) 40%),
+    rgba(251, 249, 243, 0.82);
+  --theme-glass-border: rgba(1, 1, 2, 0.12);
+  --theme-glass-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(1, 1, 2, 0.08),
+    0 24px 50px -28px rgba(1, 1, 2, 0.35);
+  --theme-glass2:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 60%),
+    rgba(239, 234, 223, 0.7);
+  --theme-glass2-border: rgba(1, 1, 2, 0.1);
+  --theme-glass2-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --theme-lift-border: rgba(112, 34, 252, 0.45);
+  --theme-lift-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 2px 4px rgba(1, 1, 2, 0.1),
+    0 30px 60px -26px rgba(112, 34, 252, 0.4);
+  --theme-btn-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 8px 20px -8px rgba(253, 143, 50, 0.7);
+  --theme-btn-shadow-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 12px 30px -8px rgba(253, 143, 50, 0.8);
+  --theme-gradient-text: linear-gradient(92deg, #7022fc 0%, #c2255c 55%, #c2570a 100%);
+  --theme-th: rgba(244, 240, 230, 0.92);
+  --theme-row-hover: rgba(112, 34, 252, 0.05);
 }
 
-html,
-body {
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-base: #010511;
+  --color-surface: #050d24;
+  --color-surface-2: #0a1634;
+  --color-surface-3: #112046;
+  --color-line: #1a2c5c;
+  --color-line-bright: #5d73a8;
+  --color-ink: #f2f6ff;
+  --color-ink-muted: #b3c0e0;
+  --color-ink-faint: #8fa0c8;
+  --color-signal: #0048de;
+  --color-signal-ink: #6fa0ff;
+  --color-signal-dim: #00339f;
+  --color-accent: #f28500;
+  --color-accent-hover: #ff9a1f;
+  --color-on-accent: #010511;
+  --color-sev-critical: #ff5c78;
+  --color-sev-high: #fd8f32;
+  --color-sev-medium: #f2d675;
+  --color-sev-low: #7fa8ff;
+  --color-sev-info: #8fa0c8;
+  --theme-mesh:
+    radial-gradient(42% 38% at 82% 6%, rgba(0, 72, 222, 0.62), transparent 70%),
+    radial-gradient(34% 34% at 12% 22%, rgba(0, 72, 222, 0.32), transparent 70%),
+    radial-gradient(30% 28% at 6% 96%, rgba(242, 133, 0, 0.30), transparent 70%),
+    radial-gradient(26% 26% at 92% 88%, rgba(111, 160, 255, 0.16), transparent 70%);
+  --theme-grain-opacity: 0.04;
+  --theme-grain-blend: screen;
+  --theme-dot: rgba(242, 246, 255, 0.11);
+  --theme-glass:
+    linear-gradient(180deg, rgba(242, 246, 255, 0.045), rgba(242, 246, 255, 0) 38%),
+    rgba(10, 22, 52, 0.72);
+  --theme-glass-border: rgba(143, 160, 200, 0.16);
+  --theme-glass-shadow:
+    inset 0 1px 0 rgba(242, 246, 255, 0.08), 0 1px 2px rgba(1, 5, 17, 0.5),
+    0 24px 60px -24px rgba(0, 20, 80, 0.7);
+  --theme-glass2:
+    linear-gradient(180deg, rgba(242, 246, 255, 0.035), rgba(242, 246, 255, 0) 50%),
+    rgba(17, 32, 70, 0.55);
+  --theme-glass2-border: rgba(143, 160, 200, 0.14);
+  --theme-glass2-shadow: inset 0 1px 0 rgba(242, 246, 255, 0.06);
+  --theme-lift-border: rgba(111, 160, 255, 0.45);
+  --theme-lift-shadow:
+    inset 0 1px 0 rgba(242, 246, 255, 0.1), 0 2px 4px rgba(1, 5, 17, 0.5),
+    0 30px 70px -24px rgba(0, 72, 222, 0.55);
+  --theme-btn-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 8px 24px -8px rgba(242, 133, 0, 0.65);
+  --theme-btn-shadow-hover:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 12px 30px -8px rgba(242, 133, 0, 0.8);
+  --theme-gradient-text: linear-gradient(92deg, #6fa0ff 0%, #b8ccff 45%, #f28500 100%);
+  --theme-th: rgba(10, 22, 52, 0.9);
+  --theme-row-hover: rgba(111, 160, 255, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-base: #010511;
+    --color-surface: #050d24;
+    --color-surface-2: #0a1634;
+    --color-surface-3: #112046;
+    --color-line: #1a2c5c;
+    --color-line-bright: #5d73a8;
+    --color-ink: #f2f6ff;
+    --color-ink-muted: #b3c0e0;
+    --color-ink-faint: #8fa0c8;
+    --color-signal: #0048de;
+    --color-signal-ink: #6fa0ff;
+    --color-signal-dim: #00339f;
+    --color-accent: #f28500;
+    --color-accent-hover: #ff9a1f;
+    --color-on-accent: #010511;
+    --color-sev-critical: #ff5c78;
+    --color-sev-high: #fd8f32;
+    --color-sev-medium: #f2d675;
+    --color-sev-low: #7fa8ff;
+    --color-sev-info: #8fa0c8;
+    --theme-mesh:
+      radial-gradient(42% 38% at 82% 6%, rgba(0, 72, 222, 0.62), transparent 70%),
+      radial-gradient(34% 34% at 12% 22%, rgba(0, 72, 222, 0.32), transparent 70%),
+      radial-gradient(30% 28% at 6% 96%, rgba(242, 133, 0, 0.30), transparent 70%),
+      radial-gradient(26% 26% at 92% 88%, rgba(111, 160, 255, 0.16), transparent 70%);
+    --theme-grain-opacity: 0.04;
+    --theme-grain-blend: screen;
+    --theme-dot: rgba(242, 246, 255, 0.11);
+    --theme-glass:
+      linear-gradient(180deg, rgba(242, 246, 255, 0.045), rgba(242, 246, 255, 0) 38%),
+      rgba(10, 22, 52, 0.72);
+    --theme-glass-border: rgba(143, 160, 200, 0.16);
+    --theme-glass-shadow:
+      inset 0 1px 0 rgba(242, 246, 255, 0.08), 0 1px 2px rgba(1, 5, 17, 0.5),
+      0 24px 60px -24px rgba(0, 20, 80, 0.7);
+    --theme-glass2:
+      linear-gradient(180deg, rgba(242, 246, 255, 0.035), rgba(242, 246, 255, 0) 50%),
+      rgba(17, 32, 70, 0.55);
+    --theme-glass2-border: rgba(143, 160, 200, 0.14);
+    --theme-glass2-shadow: inset 0 1px 0 rgba(242, 246, 255, 0.06);
+    --theme-lift-border: rgba(111, 160, 255, 0.45);
+    --theme-lift-shadow:
+      inset 0 1px 0 rgba(242, 246, 255, 0.1), 0 2px 4px rgba(1, 5, 17, 0.5),
+      0 30px 70px -24px rgba(0, 72, 222, 0.55);
+    --theme-btn-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 8px 24px -8px rgba(242, 133, 0, 0.65);
+    --theme-btn-shadow-hover:
+      inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 12px 30px -8px rgba(242, 133, 0, 0.8);
+    --theme-gradient-text: linear-gradient(92deg, #6fa0ff 0%, #b8ccff 45%, #f28500 100%);
+    --theme-th: rgba(10, 22, 52, 0.9);
+    --theme-row-hover: rgba(111, 160, 255, 0.06);
+  }
+}
+
+html {
   background-color: var(--color-base);
   color: var(--color-ink);
 }
 
 body {
+  position: relative;
+  isolation: isolate;
   font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-/* Keyboard focus must stay obvious; this is an accessibility requirement,
-   not a stylistic one. */
-:focus-visible {
-  outline: 2px solid var(--color-signal);
-  outline-offset: 2px;
+body::before {
+  content: "";
+  position: fixed;
+  inset: -12%;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--theme-mesh);
+  animation: fulcrum-drift 60s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 160px 160px;
+  mix-blend-mode: var(--theme-grain-blend);
+}
+
+@keyframes fulcrum-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(2.5%, -2%, 0) scale(1.04);
+  }
+}
+
+.glass {
+  background: var(--theme-glass);
+  border: 1px solid var(--theme-glass-border);
+  box-shadow: var(--theme-glass-shadow);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  backdrop-filter: blur(14px) saturate(130%);
+}
+
+.glass-2 {
+  background: var(--theme-glass2);
+  border: 1px solid var(--theme-glass2-border);
+  box-shadow: var(--theme-glass2-shadow);
+}
+
+.lift {
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 180ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    border-color 180ms ease;
+}
+
+.lift:hover {
+  transform: translateY(-2px);
+  border-color: var(--theme-lift-border);
+  box-shadow: var(--theme-lift-shadow);
+}
+
+.btn-glow {
+  box-shadow: var(--theme-btn-shadow);
+  transition:
+    transform 150ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    box-shadow 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.btn-glow:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--theme-btn-shadow-hover);
+}
+
+.btn-glow:active {
+  transform: translateY(0);
+}
+
+.rule-accent {
+  position: relative;
+}
+
+.rule-accent::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 2.5rem;
+  height: 2px;
   border-radius: 2px;
+  background: linear-gradient(90deg, var(--color-accent), var(--color-signal-ink));
 }
 
-/* A faint grid, evoking a console backdrop without costing an image. */
-/*
- * Console grid backdrop.
- *
- * The mask lives on a pseudo-element, not on .grid-backdrop itself. A
- * mask-image set on the element applies to the element AND ITS CHILDREN —
- * it does not fade only the background it was written for. Applied
- * directly, it faded the hero paragraph, the call-to-action row and the
- * lower half of the illustration to near-invisibility, which no contrast
- * calculation catches because the computed colour values are perfectly
- * fine and the rendered opacity is not.
- */
+.display {
+  font-family: var(--font-display);
+  letter-spacing: -0.035em;
+  line-height: 1.02;
+  font-weight: 600;
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.text-gradient {
+  background: var(--theme-gradient-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--theme-th);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.data-table tbody tr {
+  transition: background-color 120ms ease;
+}
+
+.data-table tbody tr:hover {
+  background: var(--theme-row-hover);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-signal-ink);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
 .grid-backdrop {
   position: relative;
   isolation: isolate;
@@ -91,11 +348,9 @@ body {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image:
-    linear-gradient(to right, rgba(44, 58, 75, 0.35) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(44, 58, 75, 0.35) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+  background-image: radial-gradient(var(--theme-dot) 1px, transparent 1.2px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(ellipse 70% 65% at 60% 0%, #000 30%, transparent 100%);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -108,39 +363,12 @@ body {
   }
 }
 
-/* ---------------------------------------------------------------------------
- * Motion.
- *
- * Three keyframe sets, each tied to a specific state the user needs to know
- * about: work is in progress, work is still in progress, and how long it has
- * been. Nothing here moves for decoration.
- *
- * Two rules these must obey.
- *
- * 1. No animation may start from a state that hides content. If the CSS
- *    fails to load or the animation never runs, the element must already be
- *    in its correct, visible, readable state. That is why none of these
- *    touches opacity down to 0, and why none uses a fill-mode that would
- *    hold an invisible first frame.
- *
- * 2. Every one of them needs an explicit resting state below. The global
- *    reduced-motion block above zeroes animation-DURATION but not
- *    animation-NAME, so an animation whose last keyframe differs from its
- *    first does not stop — it jumps straight to the end. For the sweep that
- *    is actively wrong: the segment parks off the end of its track and the
- *    user is left looking at an empty box where the busy indicator should
- *    be. Zeroed duration is not the same as "off".
- * ------------------------------------------------------------------------ */
-
 @keyframes fulcrum-spin {
   to {
     rotate: 360deg;
   }
 }
 
-/* The segment travels; its width never changes. Animating width would
-   relayout on every frame, and the value would have to come from CSS, which
-   the style-src CSP does not allow us to set per-element anyway. */
 @keyframes fulcrum-sweep {
   from {
     translate: -100% 0;
@@ -178,14 +406,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* The spinner carries no information the adjacent label does not already
-     carry, so it simply goes away rather than sitting there frozen. */
   .spin {
     display: none !important;
   }
 
-  /* A filled, dimmed track still reads as "working". An empty one reads as
-     "nothing is happening", which would be a lie. */
   .sweep {
     animation: none !important;
     translate: 0 0 !important;
@@ -197,15 +421,17 @@ body {
     animation: none !important;
     opacity: 1;
   }
+
+  body::before {
+    animation: none !important;
+  }
+
+  .lift:hover,
+  .btn-glow:hover {
+    transform: none;
+  }
 }
 
-/* ---------------------------------------------------------------------------
- * Legal documents.
- *
- * These pages are long-form prose rather than console UI, so they get
- * reading-width measure, real heading scale and generous leading. Scoped to
- * .legal-prose so nothing here can leak into the application chrome.
- * ------------------------------------------------------------------------- */
 .legal-prose {
   color: var(--color-ink-muted);
   line-height: 1.7;
@@ -213,15 +439,18 @@ body {
 
 .legal-prose h1 {
   color: var(--color-ink);
-  font-size: 1.875rem;
+  font-family: var(--font-display);
+  font-size: 2.5rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
 }
 
 .legal-prose h2 {
   color: var(--color-ink);
-  font-size: 1.125rem;
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+  font-size: 1.25rem;
   font-weight: 600;
   margin-top: 2.5rem;
   margin-bottom: 0.75rem;
@@ -253,7 +482,7 @@ body {
 .legal-prose strong { color: var(--color-ink); font-weight: 600; }
 
 .legal-prose a {
-  color: var(--color-signal);
+  color: var(--color-signal-ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -283,4 +512,62 @@ body {
   color: var(--color-ink);
   font-weight: 600;
   background: var(--color-surface);
+}
+
+@media print {
+  :root:root:root {
+    color-scheme: light;
+    --color-base: #ffffff;
+    --color-surface: #ffffff;
+    --color-surface-2: #f3f5f7;
+    --color-surface-3: #e6eaee;
+    --color-line: #d3d9e0;
+    --color-line-bright: #8e9aa7;
+    --color-ink: #010511;
+    --color-ink-muted: #36414d;
+    --color-ink-faint: #4f5b68;
+    --color-signal: #5516c4;
+    --color-signal-dim: #00339f;
+    --color-signal-ink: #5516c4;
+    --color-sev-critical: #b3122a;
+    --color-sev-high: #a3470a;
+    --color-sev-medium: #7a5700;
+    --color-sev-low: #3f5d7a;
+    --color-sev-info: #4f5b68;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #010511 !important;
+  }
+
+  body::before,
+  body::after {
+    display: none !important;
+  }
+
+  .glass,
+  .glass-2 {
+    background: #ffffff !important;
+    border-color: #d3d9e0 !important;
+    box-shadow: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .text-gradient {
+    background: none !important;
+    color: #010511 !important;
+  }
+
+  section,
+  tr,
+  li {
+    break-inside: avoid;
+  }
+
+  a {
+    text-decoration: none;
+  }
 }

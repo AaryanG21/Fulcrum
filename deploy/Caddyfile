@@ -1,0 +1,12 @@
+fulcrumsecurity.in {
+	reverse_proxy 127.0.0.1:3000
+
+	log {
+		output file /var/log/caddy/fulcrum.log
+		format json
+	}
+}
+
+www.fulcrumsecurity.in {
+	redir https://fulcrumsecurity.in{uri} permanent
+}

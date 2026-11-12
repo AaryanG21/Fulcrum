@@ -23,10 +23,6 @@ export function RegisterForm() {
     setError(null);
     setFieldErrors({});
 
-    // Confirmation is checked here only as a typo guard. Every real
-    // constraint — length, uniqueness, format — is enforced server-side by
-    // zod; this check exists purely so the user is not told about a typo
-    // after a round trip.
     if (password !== confirm) {
       setFieldErrors({ confirm: ["Passwords do not match"] });
       return;
@@ -51,8 +47,8 @@ export function RegisterForm() {
   }
 
   return (
-    <Panel title="Create account">
-      <form onSubmit={submit} className="space-y-4">
+    <Panel as="h1" title="Create account">
+      <form method="post" onSubmit={submit} className="space-y-4">
         {error && <Alert>{error}</Alert>}
 
         <Field label="Email" error={fieldErrors.email?.[0]}>
@@ -94,16 +90,6 @@ export function RegisterForm() {
           />
         </Field>
 
-        {/*
-          The age and terms confirmation.
-
-          Unticked by default and `required`, so the affirmative action is
-          the user's. A pre-ticked box records nothing — it captures the
-          default, not a decision — and under the DPDP Act consent has to be
-          a clear affirmative action. The server re-validates this with
-          z.literal(true), so the record does not depend on the UI having
-          rendered correctly.
-        */}
         <label className="flex items-start gap-2.5 text-sm text-ink-muted">
           <input
             type="checkbox"
@@ -114,11 +100,11 @@ export function RegisterForm() {
           />
           <span>
             I am 18 or older and I accept the{" "}
-            <Link href="/terms" className="text-signal hover:underline">
+            <Link href="/terms" className="text-signal-ink hover:underline">
               Terms of service
             </Link>{" "}
             and{" "}
-            <Link href="/privacy" className="text-signal hover:underline">
+            <Link href="/privacy" className="text-signal-ink hover:underline">
               Privacy policy
             </Link>
             .

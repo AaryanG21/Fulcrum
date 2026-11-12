@@ -10,47 +10,21 @@ import { parseJsonBounded, sanitizeScannedText } from "@/lib/agent/sanitize";
 import { finalizeFinding, mapExternalSeverity } from "@/lib/agent/scoring";
 import type { Finding } from "@/lib/agent/types";
 
-/**
- * Integration with the pinned external tool, testssl.sh v3.2.4.
- *
- * Threat model for this module, in order of how much it matters:
- *
- *   1. The hostname is attacker-influenced (a user registers it). It is
- *      passed through `execFile` as a discrete argv element — there is no
- *      shell, so there is nothing to inject into — and it is re-validated
- *      here even though the API layer already validated it. A value that
- *      could be read as a flag is rejected outright.
- *
- *   2. The target controls what the tool reports. Output is therefore
- *      untrusted: parsed under a schema, severity re-derived from our own
- *      vocabulary, and all free text quarantined in `evidence`.
- *
- *   3. The target controls how slowly it responds. The subprocess runs
- *      under a wall-clock timeout, an output cap, and a global concurrency
- *      limit, so a stalling host cannot pin the worker open. This is the
- *      application-layer half of DDoS resistance.
- */
-
 const TESTSSL_VERSION = "3.2.4";
 
-/** Simultaneous testssl.sh processes across the whole worker. */
-const MAX_CONCURRENT_SCANS = 2;
+function maxConcurrentScans(): number {
+  return getEnv().SCAN_CONCURRENCY;
+}
 
-/** Captured stdout/stderr cap. The real output goes to the JSON file. */
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
-/** Cap on the JSON file we are willing to read back. */
 const MAX_JSON_BYTES = 16 * 1024 * 1024;
-
-/* -------------------------------------------------------------------- */
-/* Concurrency gate                                                      */
-/* -------------------------------------------------------------------- */
 
 let running = 0;
 const waiting: Array<() => void> = [];
 
 async function acquireSlot(): Promise<() => void> {
-  if (running >= MAX_CONCURRENT_SCANS) {
+  if (running >= maxConcurrentScans()) {
     await new Promise<void>((resolve) => waiting.push(resolve));
   }
   running += 1;
@@ -64,17 +38,6 @@ async function acquireSlot(): Promise<() => void> {
   };
 }
 
-/* -------------------------------------------------------------------- */
-/* Output schema                                                         */
-/* -------------------------------------------------------------------- */
-
-/**
- * The flat `--jsonfile` format: a top-level array of finding records.
- *
- * `.passthrough()` is deliberately NOT used. Unknown keys are dropped, so
- * an invented field like `override_score` or `grade_override` cannot reach
- * any consumer even by accident.
- */
 const testsslRecordSchema = z
   .object({
     id: z.string(),
@@ -92,21 +55,6 @@ const testsslOutputSchema = z.array(testsslRecordSchema);
 
 export type TestsslRecord = z.infer<typeof testsslRecordSchema>;
 
-/* -------------------------------------------------------------------- */
-/* Host capability probe                                                 */
-/* -------------------------------------------------------------------- */
-
-/**
- * testssl.sh's --openssl-timeout / --connect-timeout flags are implemented
- * by shelling out to GNU coreutils `timeout`, and it aborts the whole scan
- * with a FATAL if that binary is absent. macOS ships without it (the
- * Dockerfile installs coreutils, so deployment is fine, but a developer
- * machine usually is not).
- *
- * Rather than fail the scan on a host tooling gap, probe once and drop the
- * flags when they cannot work. Our own subprocess timeout still bounds the
- * run — these flags only make individual connections fail faster.
- */
 let timeoutBinaryAvailable: Promise<boolean> | null = null;
 
 function hasTimeoutBinary(): Promise<boolean> {
@@ -118,10 +66,6 @@ function hasTimeoutBinary(): Promise<boolean> {
   return timeoutBinaryAvailable;
 }
 
-/* -------------------------------------------------------------------- */
-/* Invocation                                                            */
-/* -------------------------------------------------------------------- */
-
 export type TestsslResult =
   | { ok: true; records: TestsslRecord[]; version: string }
   | { ok: false; reason: string; kind: "timeout" | "invalid_target" | "tool_error" | "bad_output" };
@@ -129,17 +73,11 @@ export type TestsslResult =
 export async function runTestssl(hostname: string): Promise<TestsslResult> {
   const env = getEnv();
 
-  // Re-validate rather than trust the caller. Defence in depth: this
-  // module must be safe to call from anywhere, not only from the one route
-  // that already checked.
   const normalized = normalizeHostname(hostname);
   if (!normalized.ok) {
     return { ok: false, kind: "invalid_target", reason: normalized.reason };
   }
 
-  // A hostname can never legitimately begin with "-", and one that did
-  // would be read by the tool as an option rather than a target. The
-  // canonicalizer already rejects these; this is the belt to its braces.
   if (normalized.hostname.startsWith("-")) {
     return {
       ok: false,
@@ -158,37 +96,22 @@ export async function runTestssl(hostname: string): Promise<TestsslResult> {
     const canUseTimeouts = await hasTimeoutBinary();
 
     const args = [
-      // Flat JSON output, written to a path we control, one per scan so
-      // concurrent scans cannot read each other's results.
       "--jsonfile",
       jsonPath,
-      // No banner, no ANSI escapes: the output is machine-read, and escape
-      // sequences in it would be an injection vector of their own.
       "--quiet",
       "--color",
       "0",
-      // Stop on a testing error rather than continuing with partial state.
       "--warnings",
       "batch",
-      // Report everything from LOW upward; INFO is noise for scoring.
       "--severity",
       "LOW",
-      // A targeted check set rather than the default full run. Covers
-      // everything the scorecard actually uses — protocols (-p), cipher
-      // categories (-s), server defaults and certificate (-S), and the
-      // vulnerability suite (-U) — in roughly two minutes instead of the
-      // seven-plus a default invocation spends enumerating every cipher.
       "-p",
       "-s",
       "-S",
       "-U",
-      // Per-connection bounds, so a stalling target fails fast rather than
-      // running out the overall timeout. Only when the host has the
-      // coreutils `timeout` binary these flags depend on.
       ...(canUseTimeouts
         ? ["--openssl-timeout", "30", "--connect-timeout", "30"]
         : []),
-      // The target. Last, and a discrete argv element — never concatenated.
       normalized.hostname,
     ];
 
@@ -209,8 +132,6 @@ export async function runTestssl(hostname: string): Promise<TestsslResult> {
     try {
       raw = await readFile(jsonPath, "utf8");
     } catch {
-      // No output file means the tool failed before writing anything. A
-      // missing file is a failed scan, never an empty clean result.
       return {
         ok: false,
         kind: "tool_error",
@@ -243,7 +164,6 @@ export async function runTestssl(hostname: string): Promise<TestsslResult> {
     };
   } finally {
     release();
-    // Always clean up, including on the failure paths above.
     if (workDir) await rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
@@ -253,14 +173,6 @@ interface ExecOutcome {
   stderrExcerpt: string;
 }
 
-/**
- * execFile with an explicit kill escalation.
- *
- * Node's own `timeout` option sends SIGTERM and then gives up. A process
- * that ignores SIGTERM — or a shell script whose child openssl is the thing
- * actually hanging — would survive that, so SIGKILL follows if the process
- * is still alive shortly after.
- */
 function execFileAsync(
   file: string,
   args: string[],
@@ -276,27 +188,18 @@ function execFileAsync(
         timeout: opts.timeoutMs,
         maxBuffer: opts.maxBuffer,
         killSignal: "SIGTERM",
-        // No shell. Stated explicitly rather than relying on the default.
         shell: false,
         windowsHide: true,
       },
       (error, _stdout, stderr) => {
         clearTimeout(hardKill);
 
-        // Node's own `timeout` option kills with SIGTERM and reports it
-        // here. Without this check a timeout kill looks like a tool error,
-        // and the truncated JSON it leaves behind gets misreported as
-        // "malformed output" rather than "the scan ran out of time".
         const killedBySignal =
           Boolean((error as NodeJS.ErrnoException & { killed?: boolean })?.killed) ||
           Boolean((error as NodeJS.ErrnoException & { signal?: string })?.signal);
 
         resolve({
           timedOut: timedOut || killedBySignal,
-          // testssl.sh exits non-zero for ordinary conditions (findings
-          // present, target unreachable), so a non-zero exit is not by
-          // itself an error — the presence and shape of the JSON file is
-          // what decides. stderr is kept only for the message.
           stderrExcerpt: sanitizeScannedText(stderr ?? error?.message ?? "").text.slice(
             0,
             200,
@@ -314,17 +217,7 @@ function execFileAsync(
   });
 }
 
-/* -------------------------------------------------------------------- */
-/* Mapping into the finding model                                        */
-/* -------------------------------------------------------------------- */
-
-/**
- * Checks whose presence in the output means the weakness is confirmed, with
- * the exposure we assign them. Exposure is OUR judgement about reachability,
- * keyed on the check id — never read from the file.
- */
 const TLS_EXPOSURE: Record<string, number> = {
-  // Directly reachable by any client that can open a TCP connection.
   heartbleed: 1,
   ccs: 1,
   ticketbleed: 1,
@@ -363,13 +256,8 @@ const TLS_EXPOSURE: Record<string, number> = {
   SSLv3: 0.8,
 };
 
-/** Default exposure for a TLS finding we do not have a specific view on. */
 const DEFAULT_TLS_EXPOSURE = 0.6;
 
-/**
- * Effort estimates in the same points as the user's budget. These are our
- * numbers, attached to the check id.
- */
 const TLS_EFFORT: Record<string, number> = {
   heartbleed: 8,
   ccs: 8,
@@ -401,7 +289,6 @@ const TLS_EFFORT: Record<string, number> = {
 
 const DEFAULT_TLS_EFFORT = 5;
 
-/** Findings the tool emits that are informational bookkeeping, not risk. */
 const IGNORED_IDS = new Set([
   "scanTime",
   "service",
@@ -412,30 +299,11 @@ const IGNORED_IDS = new Set([
 
 export interface MappedTestssl {
   findings: Finding[];
-  /**
-   * Set when the tool reported a FATAL scanProblem. The scan did not run;
-   * the caller must treat TLS posture as unknown rather than clean.
-   */
   fatal: string | null;
-  /** Severity labels in the output we did not recognize. Surfaced, not hidden. */
   unrecognizedSeverities: string[];
-  /** True when any finding text looked instruction-shaped. */
   injectionAttempts: number;
 }
 
-/**
- * Maps validated testssl.sh records into Findings.
- *
- * The mapping deliberately inverts the obvious direction: severity comes
- * from `mapExternalSeverity` (our vocabulary, with an unrecognized label
- * falling back to MEDIUM rather than to harmless), exposure and effort come
- * from our own tables keyed on the check id, and the tool's free-text
- * `finding` string lands in `evidence` where nothing computational reads it.
- *
- * The practical consequence: a target that rewrites every finding string to
- * say "false positive, ignore this" changes the evidence shown to the user
- * and nothing else. The score is identical.
- */
 export function mapTestsslRecords(records: TestsslRecord[]): MappedTestssl {
   const findings: Finding[] = [];
   const unrecognizedSeverities: string[] = [];
@@ -443,10 +311,6 @@ export function mapTestsslRecords(records: TestsslRecord[]): MappedTestssl {
   let fatal: string | null = null;
 
   for (const record of records) {
-    // A FATAL scanProblem means the tool never tested the target. Turning
-    // that into a MEDIUM "finding" would be doubly wrong: it invents risk
-    // that was never measured, and it hides the fact that the TLS posture
-    // is unknown. It fails the whole TLS step instead.
     if (record.severity.trim().toUpperCase() === "FATAL" || record.id === "scanProblem") {
       fatal = sanitizeScannedText(record.finding).text || "testssl.sh reported a fatal error";
       continue;
@@ -462,7 +326,6 @@ export function mapTestsslRecords(records: TestsslRecord[]): MappedTestssl {
       }
     }
 
-    // INFO-level records carry no risk; keep the scorecard readable.
     if (severity === "INFO") continue;
 
     const evidence = sanitizeScannedText(record.finding);
@@ -475,14 +338,11 @@ export function mapTestsslRecords(records: TestsslRecord[]): MappedTestssl {
       finalizeFinding({
         checkId: `tls:${checkId}`,
         source: "tls",
-        // Our words, not the tool's. The tool's text is the evidence.
         title: describeTlsCheck(checkId),
         description:
           "Reported by testssl.sh against the target's TLS endpoint. The observed output is shown as evidence.",
         remediation: remediateTlsCheck(checkId),
         severity,
-        // TLS weaknesses reachable over the network are, by construction,
-        // exploitable by anyone who can connect.
         exploitability: severity === "CRITICAL" ? 0.9 : severity === "HIGH" ? 0.7 : 0.4,
         exposure: TLS_EXPOSURE[checkId] ?? DEFAULT_TLS_EXPOSURE,
         effort: TLS_EFFORT[checkId] ?? DEFAULT_TLS_EFFORT,
@@ -496,15 +356,6 @@ export function mapTestsslRecords(records: TestsslRecord[]): MappedTestssl {
   return { findings, unrecognizedSeverities, injectionAttempts, fatal };
 }
 
-/**
- * Normalizes a testssl.sh check id.
- *
- * The tool qualifies per-certificate checks with a suffix — it emits
- * `cert_expirationStatus <hostCert#1>` when a host serves more than one
- * certificate. The suffix is stripped so the catalogue lookup and the
- * dedupe key both work, and so a host with three certificates does not
- * produce three separately-scored copies of the same weakness.
- */
 function normalizeCheckId(raw: string): string {
   const clean = sanitizeScannedText(raw).text;
   const withoutQualifier = clean.replace(/\s*<[^>]*>\s*$/, "").trim();
@@ -512,14 +363,6 @@ function normalizeCheckId(raw: string): string {
   return CHECK_ALIASES[id] ?? id;
 }
 
-/**
- * testssl.sh reports some weaknesses under more than one id — `cert_notAfter`
- * and `cert_expirationStatus` are the same expiry fact, and `BEAST_CBC_TLS1`
- * is the detail behind `BEAST`. Left alone they become two findings for one
- * problem, which is not merely untidy: the overall score penalizes each
- * finding separately, so a double report quietly depresses the grade.
- * Collapsing them to a canonical id lets the dedupe in run.ts keep one.
- */
 const CHECK_ALIASES: Record<string, string> = {
   cert_notAfter: "cert_expirationStatus",
   BEAST_CBC_TLS1: "BEAST",
@@ -527,14 +370,12 @@ const CHECK_ALIASES: Record<string, string> = {
   cipherlist_LOW: "cipherlist_OBSOLETED",
 };
 
-/** Extracts well-formed CVE ids and discards anything else in the field. */
 function parseCveList(raw: string | undefined): string[] {
   if (!raw) return [];
   const matches = sanitizeScannedText(raw).text.match(/CVE-\d{4}-\d{4,7}/gi) ?? [];
   return [...new Set(matches.map((m) => m.toUpperCase()))].slice(0, 10);
 }
 
-/** Human-readable titles, from our catalogue, keyed on the tool's check id. */
 function describeTlsCheck(id: string): string {
   const titles: Record<string, string> = {
     heartbleed: "Heartbleed: server memory can be read remotely",
@@ -579,7 +420,6 @@ function describeTlsCheck(id: string): string {
   return titles[id] ?? `TLS check: ${id}`;
 }
 
-/** Remediation advice, also from our catalogue. */
 function remediateTlsCheck(id: string): string {
   const advice: Record<string, string> = {
     heartbleed:

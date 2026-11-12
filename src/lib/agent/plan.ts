@@ -9,32 +9,6 @@ import type {
   RemediationStep,
 } from "@/lib/agent/types";
 
-/**
- * Budget-constrained remediation planning.
- *
- * The question this answers is not "what is wrong" — the findings list
- * already says that — but "given that you have a limited amount of effort,
- * what should you do with it". Those give different answers surprisingly
- * often: a critical finding costing 13 points can be worth deferring behind
- * three medium ones costing 1 point each.
- *
- * Ordering key is risk reduced per unit of effort. Ties break toward the
- * higher absolute risk, then toward the cheaper fix.
- *
- * Selection is greedy rather than an exact knapsack solve. That is a
- * deliberate trade and worth naming: greedy-by-ratio can miss the optimal
- * combination (the classic case is one item that exactly fills the budget
- * being passed over for two that nearly do). It is chosen because the
- * output has to be *explainable* — "we did the highest-value-per-hour fix
- * first, then the next" is advice someone can act on and argue with,
- * whereas an optimal set produced by dynamic programming is a black box
- * that occasionally recommends skipping the obvious thing. A backfill pass
- * recovers most of the lost value.
- *
- * Nothing here reads `Finding.evidence`. The ordering cannot be influenced
- * by text from the scanned target.
- */
-
 export interface PlanOptions {
   budgetLimit: number;
 }
@@ -65,7 +39,6 @@ export function buildRemediationPlan(
 
   let budgetUsed = 0;
 
-  // Pass one: greedy by efficiency.
   for (const candidate of actionable) {
     const { finding, efficiency } = candidate;
 
@@ -99,8 +72,6 @@ export function buildRemediationPlan(
     });
   }
 
-  // Pass two: backfill. A cheap fix skipped earlier may now fit in the
-  // budget that the greedy pass left unspent.
   const remaining = budgetLimit - budgetUsed;
   if (remaining > 0) {
     for (let i = deferred.length - 1; i >= 0; i -= 1) {
@@ -128,11 +99,8 @@ export function buildRemediationPlan(
     }
   }
 
-  // Projected posture once every included step is done.
   const residual = findings.filter((f) => !fixedCheckIds.has(f.checkId));
   const projectedScore = computeOverallScore(residual);
-  // Projected against what would REMAIN, so completing the plan can lift
-  // the floor as well as the score — which is the honest projection.
   const projectedWorst = worstSeverity(residual);
 
   return {
@@ -146,7 +114,6 @@ export function buildRemediationPlan(
   };
 }
 
-/** Per-step justification, in plain language, shown in the scorecard. */
 function explainStep(finding: Finding, efficiency: number): string {
   const parts: string[] = [];
 

@@ -16,17 +16,6 @@ const schema = z.object({
   reason: z.string().trim().min(3).max(500),
 });
 
-/**
- * Suspend, reinstate, or unlock a user account.
- *
- * Destructive, so it requires the admin role AND a re-authentication within
- * the last few minutes (requireAdminWithReauth). Suspension also revokes
- * every one of that user's sessions immediately — a suspension that left
- * live sessions running would be cosmetic.
- *
- * An admin cannot suspend their own account: that is almost always a
- * misclick, and it can leave a deployment with no reachable administrator.
- */
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ userId: string }> },
@@ -78,9 +67,6 @@ export async function POST(
     }
 
     case "reinstate": {
-      // A reinstated account returns to ACTIVE only if it had completed
-      // 2FA enrollment; otherwise it goes back to PENDING_2FA so the
-      // mandatory-second-factor rule still holds.
       const enrolled = await prisma.user.findUnique({
         where: { id: target.id },
         select: { twoFactorEnabled: true },

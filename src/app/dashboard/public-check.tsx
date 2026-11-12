@@ -5,15 +5,6 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/client/api";
 import { Alert, Busy, Field, Panel, buttonClass, inputClass } from "@/components/ui";
 
-/**
- * Headers-only check of any public host.
- *
- * The copy here does real work. Someone arriving at a box that accepts any
- * hostname will reasonably assume it does what the other box does, and the
- * difference — one request versus hundreds of TLS handshakes — is the
- * difference between reading a page and probing a stranger's server. So it
- * says what it does before you use it, not only afterwards on the result.
- */
 export function PublicCheck() {
   const router = useRouter();
   const [hostname, setHostname] = useState("");
@@ -50,7 +41,7 @@ export function PublicCheck() {
       title="Check any site's headers"
       description="No ownership needed — one request, response headers only."
     >
-      <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
+      <form method="post" onSubmit={submit} className="flex flex-wrap items-end gap-3">
         <div className="min-w-64 flex-1">
           <Field label="Hostname" hint="Domain only — no scheme, path, or port.">
             <input

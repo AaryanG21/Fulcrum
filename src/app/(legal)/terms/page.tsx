@@ -5,20 +5,12 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Terms of service",
+  robots: { index: true, follow: true },
+  alternates: { canonical: "/terms" },
   description:
     "The rules for using Fulcrum: what you may scan, what you may not, and what the service does and does not promise.",
 };
 
-/**
- * Terms of service.
- *
- * The acceptable-use section is the one that does real work. Everything
- * else here is ordinary. Fulcrum can be pointed at a host the user does not
- * own — deliberately, in a narrow, throttled form — so the boundary between
- * that and unauthorised scanning has to be stated in the terms and not only
- * enforced in code. Enforcement without notice leaves someone who crosses
- * the line able to say nobody told them.
- */
 export default function Terms() {
   return (
     <>
@@ -155,10 +147,13 @@ export default function Terms() {
       </p>
 
       <p>
-        Recovery is by backup code only. If you lose your authenticator and
-        your backup codes, access cannot be restored — we hold nothing that
-        would let us verify your identity. This is a consequence of not
-        collecting that information in the first place.
+        You can reset a forgotten password by email, but doing so also needs a
+        code from your authenticator app or one of your backup codes, so that
+        access to an inbox alone is never enough to take over an account. If
+        you lose your authenticator <em>and</em> your backup codes, access
+        cannot be restored — we hold nothing that would let us verify your
+        identity. This is a consequence of not collecting that information in
+        the first place.
       </p>
 
       <h2>No warranty</h2>

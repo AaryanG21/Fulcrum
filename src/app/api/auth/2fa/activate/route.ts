@@ -21,14 +21,6 @@ export const dynamic = "force-dynamic";
 
 const schema = z.object({ code: totpCodeSchema });
 
-/**
- * Completes TOTP enrollment.
- *
- * Only once a valid code is produced does the account flip to ACTIVE with
- * twoFactorEnabled=true, and only then are backup codes issued. The
- * plaintext backup codes are returned exactly once, in this response, and
- * are never recoverable afterwards — only their argon2id hashes are stored.
- */
 export async function POST(request: NextRequest) {
   const meta = getRequestMeta(request);
 
@@ -66,6 +58,7 @@ export async function POST(request: NextRequest) {
       id: true,
       role: true,
       status: true,
+      emailVerifiedAt: true,
       twoFactorSecret: true,
       twoFactorEnabled: true,
       twoFactorLastTimeStep: true,
@@ -122,14 +115,21 @@ export async function POST(request: NextRequest) {
     metadata: { backupCodesIssued: backupCodes.length },
   });
 
-  // First-time enrollment logs the user in; a re-enrollment by someone who
-  // already had a session keeps the session they arrived with.
+  let signedIn = Boolean(session);
   if (!session) {
-    await createSession(user.id, user.role, meta);
+    if (user.emailVerifiedAt) {
+      await createSession(user.id, user.role, meta);
+      signedIn = true;
+    }
     await clearAuthCookie(MFA_COOKIE);
   }
 
-  const response = apiOk({ status: "enrolled", backupCodes });
+  const response = apiOk({
+    status: "enrolled",
+    backupCodes,
+    signedIn,
+    emailVerificationRequired: !user.emailVerifiedAt,
+  });
   response.headers.set("Cache-Control", "no-store");
   return response;
 }

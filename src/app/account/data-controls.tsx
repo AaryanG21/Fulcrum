@@ -5,23 +5,6 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/client/api";
 import { Alert, Busy, Field, Panel, buttonClass, inputClass } from "@/components/ui";
 
-/**
- * Export and deletion — the two data rights that need a UI.
- *
- * Export is a plain link with no friction. Putting obstacles in front of a
- * right someone is entitled to exercise is its own kind of dark pattern,
- * and nothing irreversible happens.
- *
- * Deletion is gated on re-entering the password and a 2FA code, because a
- * session left open on an unlocked laptop should not be enough to destroy
- * an account. The confirmation asks for the word "delete" rather than
- * offering a pre-focused button: the friction is in proportion to the
- * consequence, and there is nothing to undo afterwards.
- *
- * What it does NOT do is try to talk the user out of it, hide the control,
- * or bury it behind a support email. Deletion is a right, not a retention
- * opportunity.
- */
 export function DataControls() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -44,8 +27,6 @@ export function DataControls() {
     setBusy(true);
     setError(null);
 
-    // Step up first. The reauth cookie it sets is what the delete endpoint
-    // checks; without it the call returns 401 reauth_required.
     const stepUp = await apiFetch("/api/auth/reauth", {
       method: "POST",
       body: { password, code },
@@ -68,7 +49,6 @@ export function DataControls() {
       return;
     }
 
-    // The session is gone server-side and the cookies are cleared.
     router.push("/");
     router.refresh();
   }
@@ -118,7 +98,7 @@ export function DataControls() {
             </button>
           </>
         ) : (
-          <form onSubmit={deleteAccount} className="space-y-4">
+          <form method="post" onSubmit={deleteAccount} className="space-y-4">
             <Alert tone="critical">
               This permanently deletes your account and all of your data.
               Confirm your identity to continue.

@@ -7,16 +7,6 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/client/api";
 import { Alert, Busy, Field, Panel, buttonClass, inputClass } from "@/components/ui";
 
-/**
- * TOTP enrollment.
- *
- * The backup codes shown at the end exist only in this response — the
- * server stores argon2id hashes and cannot recover them. The UI says so
- * plainly and makes the user acknowledge it before moving on, because a
- * user who breezes past this screen has no recovery path if they lose
- * their phone.
- */
-
 interface SetupPayload {
   secret: string;
   otpauthUri: string;
@@ -29,17 +19,11 @@ export function EnrollFlow() {
   const [code, setCode] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [needsEmailConfirmation, setNeedsEmailConfirmation] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Set when the server says this account already has an authenticator.
-  // That is not an error the user can act on from this page, so it gets
-  // its own state and its own way out rather than a red box.
   const [alreadyEnrolled, setAlreadyEnrolled] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // Deliberately click-triggered rather than fired on mount: this call
-  // generates and stores a NEW authenticator secret, which invalidates any
-  // previous one. A mutation that significant should not happen because a
-  // page happened to render — or re-render.
   async function beginSetup() {
     setBusy(true);
     setError(null);
@@ -50,11 +34,6 @@ export function EnrollFlow() {
     setBusy(false);
 
     if (!result.ok) {
-      // The account already has a second factor and this request did not
-      // carry a full session. Nothing on this page can resolve that, and
-      // the raw message ("Sign in fully before changing your
-      // authenticator") tells the user what is wrong without telling them
-      // where to go.
       if (result.error.code === "reauth_required") {
         setAlreadyEnrolled(true);
         return;
@@ -70,10 +49,11 @@ export function EnrollFlow() {
     setBusy(true);
     setError(null);
 
-    const result = await apiFetch<{ backupCodes: string[] }>(
-      "/api/auth/2fa/activate",
-      { method: "POST", body: { code } },
-    );
+    const result = await apiFetch<{
+      backupCodes: string[];
+      signedIn: boolean;
+      emailVerificationRequired: boolean;
+    }>("/api/auth/2fa/activate", { method: "POST", body: { code } });
     setBusy(false);
 
     if (!result.ok) {
@@ -81,22 +61,13 @@ export function EnrollFlow() {
       return;
     }
 
+    setNeedsEmailConfirmation(!result.data.signedIn);
     setBackupCodes(result.data.backupCodes);
   }
 
-  // How someone lands here: registering with an address that already has
-  // an account returns the same success response as a new registration —
-  // deliberately, so nobody can probe which addresses are registered — and
-  // that hands out an mfa_pending cookie and routes here. Every step of
-  // that is correct, and together they strand an existing user on a page
-  // that cannot help them.
-  //
-  // This says nothing a stranger could use: you only see it holding a
-  // valid mfa_pending token for this account, which means you already
-  // passed the password step.
   if (alreadyEnrolled) {
     return (
-      <Panel title="You already have an authenticator">
+      <Panel as="h1" title="You already have an authenticator">
         <p className="text-sm leading-relaxed text-ink-muted">
           This account already has two-factor authentication set up, so
           there is nothing to enrol here. Signing in will ask for a code
@@ -107,7 +78,7 @@ export function EnrollFlow() {
         <div className="mt-5 flex flex-wrap gap-3">
           <Link
             href="/login"
-            className="rounded-md bg-signal px-4 py-2 text-sm font-semibold text-base transition-opacity hover:opacity-90"
+            className="btn-glow rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-accent-hover"
           >
             Sign in
           </Link>
@@ -125,17 +96,23 @@ export function EnrollFlow() {
 
   if (backupCodes) {
     return (
-      <Panel title="Save your backup codes">
+      <Panel as="h1" title="Save your backup codes">
         <Alert tone="signal">
           These codes are shown once and cannot be recovered. Store them
           somewhere separate from your phone.
         </Alert>
 
+        <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+          They are also how you get back in if you lose your phone or need to
+          reset your password. If you lose both the authenticator app and
+          these codes, we cannot recover the account for you.
+        </p>
+
         <ul className="mt-4 grid grid-cols-2 gap-2">
           {backupCodes.map((c) => (
             <li
               key={c}
-              className="rounded border border-line-bright bg-surface-2 px-3 py-2 text-center font-mono text-sm tracking-widest text-ink"
+              className="glass-2 rounded-xl px-3 py-2 text-center font-mono text-sm tracking-widest text-ink"
             >
               {c}
             </li>
@@ -157,16 +134,26 @@ export function EnrollFlow() {
           I have saved these codes somewhere safe.
         </label>
 
+        {needsEmailConfirmation && (
+          <div className="mt-4">
+            <Alert tone="signal">
+              One last step: we sent a confirmation link to your email address.
+              Open it, then sign in. You cannot use the account until the
+              address is confirmed.
+            </Alert>
+          </div>
+        )}
+
         <button
           type="button"
           className={`${buttonClass} mt-4 w-full`}
           disabled={!acknowledged}
           onClick={() => {
-            router.push("/dashboard");
+            router.push(needsEmailConfirmation ? "/login" : "/dashboard");
             router.refresh();
           }}
         >
-          Continue to dashboard
+          {needsEmailConfirmation ? "Go to sign in" : "Continue to dashboard"}
         </button>
       </Panel>
     );
@@ -174,6 +161,7 @@ export function EnrollFlow() {
 
   return (
     <Panel
+      as="h1"
       title="Set up two-factor authentication"
       description="Scan this with an authenticator app, then enter the code it shows."
     >
@@ -182,8 +170,6 @@ export function EnrollFlow() {
       {setup ? (
         <div className="space-y-5">
           <div className="flex justify-center rounded-lg border border-line bg-white p-4">
-            {/* Rendered server-side as a data URI: the secret never touches
-                a third-party QR service. */}
             <Image
               src={setup.qrDataUri}
               alt="QR code for authenticator app enrollment"
@@ -197,12 +183,12 @@ export function EnrollFlow() {
             <p className="text-xs text-ink-faint">
               Cannot scan? Enter this key manually:
             </p>
-            <code className="mt-1 block overflow-x-auto rounded border border-line-bright bg-surface-2 px-3 py-2 font-mono text-sm break-all text-ink">
+            <code className="mt-1 block overflow-x-auto rounded-xl border border-line bg-base/60 px-3 py-2 font-mono text-sm break-all text-ink">
               {setup.secret}
             </code>
           </div>
 
-          <form onSubmit={activate} className="space-y-4">
+          <form method="post" onSubmit={activate} className="space-y-4">
             <Field label="Code from your app">
               <input
                 className={`${inputClass} font-mono text-lg tracking-[0.4em]`}

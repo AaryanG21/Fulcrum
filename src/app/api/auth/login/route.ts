@@ -20,18 +20,6 @@ import { getEnv } from "@/lib/env";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * Step one of login: password only.
- *
- * A correct password never produces a session here. It produces a
- * short-lived mfa_pending token, and only /api/auth/2fa/verify can trade
- * that for a real session. Keeping the two steps in separate token types
- * (checked by `typ`) is what makes the second factor non-optional.
- *
- * Every failure path returns the same 401 body. The specific reason —
- * unknown email, wrong password, locked, suspended — goes to the audit log,
- * not to the client.
- */
 const GENERIC_FAILURE = "Invalid email, password, or account state.";
 
 export async function POST(request: NextRequest) {
@@ -48,8 +36,6 @@ export async function POST(request: NextRequest) {
 
   const { email, password } = body.data;
 
-  // Keyed on IP *and* account, so neither one IP against many accounts nor
-  // many IPs against one account slips through.
   const rateKey = ipAccountKey(meta.ipAddress, email);
   const limit = checkRateLimit("login", rateKey);
   if (!limit.allowed) {
@@ -71,14 +57,13 @@ export async function POST(request: NextRequest) {
       passwordHash: true,
       status: true,
       twoFactorEnabled: true,
+      emailVerifiedAt: true,
       lockedUntil: true,
       failedLoginCount: true,
     },
   });
 
   if (!user) {
-    // Burn comparable CPU time so response latency does not disclose
-    // whether the address is registered.
     await fakeVerifyForTiming(password);
     await recordAttempt({
       email,
@@ -164,8 +149,6 @@ export async function POST(request: NextRequest) {
     return apiError(401, "invalid_credentials", GENERIC_FAILURE);
   }
 
-  // Transparent parameter upgrade: if this hash predates a parameter
-  // bump, rewrite it now that we hold the plaintext legitimately.
   if (needsRehash(user.passwordHash)) {
     await prisma.user.update({
       where: { id: user.id },
@@ -189,9 +172,19 @@ export async function POST(request: NextRequest) {
     userAgent: meta.userAgent,
   });
 
-  // A correct password clears the per-IP+account counter for step one only;
-  // the 2FA step has its own budget.
   resetRateLimit("login", rateKey);
+
+  if (!user.emailVerifiedAt) {
+    await writeAudit({
+      actorUserId: user.id,
+      action: "LOGIN_BLOCKED_UNVERIFIED_EMAIL",
+      targetType: "User",
+      targetId: user.id,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+    return apiOk({ status: "email_unverified" });
+  }
 
   const pendingToken = await signMfaPendingToken(user.id);
   await setAuthCookie({

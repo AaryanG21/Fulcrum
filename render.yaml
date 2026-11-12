@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: fulcrum
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/ready
+    envVars:
+      - key: APP_ORIGIN
+        value: https://fulcrumsecurity.in
+      - key: TRUST_PROXY_HEADERS
+        value: "true"
+      - key: TRUSTED_PROXY_HOPS
+        value: "1"
+      - key: EMAIL_TRANSPORT
+        value: api
+      - key: EMAIL_API_PROVIDER
+        value: brevo
+      - key: EMAIL_FROM
+        value: Fulcrum <aaryan@fulcrumsecurity.in>
+      - key: SCAN_CONCURRENCY
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SIGNING_KEY
+        sync: false
+      - key: TOTP_ENCRYPTION_KEY
+        sync: false
+      - key: EMAIL_API_KEY
+        sync: false
